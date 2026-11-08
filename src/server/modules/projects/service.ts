@@ -12,10 +12,13 @@ function toDTO(p: DbProject, taskCount: number, doneCount: number): ProjectDTO {
 export async function listProjects(userId: string, workspaceId: string): Promise<ProjectDTO[]> {
   await requireMembership(userId, workspaceId);
   const rows = await store.projects.find({ workspaceId }, { sort: { createdAt: 1 } });
-  const taskRows = await store.tasks.find({ workspaceId, deletedAt: null });
+  const counts = await store.tasks.aggregate<{ _id: string; total: number; done: number }>([
+    { $match: { workspaceId, deletedAt: null } },
+    { $group: { _id: "$projectId", total: { $sum: 1 }, done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } } } },
+  ]);
   return rows.map((p) => {
-    const children = taskRows.filter((t) => t.projectId === p.id);
-    return toDTO(p, children.length, children.filter((t) => t.status === "done").length);
+    const count = counts.find((c) => c._id === p.id);
+    return toDTO(p, count?.total ?? 0, count?.done ?? 0);
   });
 }
 export async function createProject(userId: string, input: z.infer<typeof projectCreateSchema>): Promise<ProjectDTO> {
@@ -43,7 +46,9 @@ export async function updateProject(userId: string, projectId: string, input: z.
       ...(input.archived !== undefined ? { archived: input.archived ? 1 : 0 } : {}),
     });
     if (!saved) throw new ApiError(404, "Project not found");
-    return toDTO(saved, 0, 0);
+    const total = await store.tasks.count({ workspaceId: saved.workspaceId, projectId, deletedAt: null });
+    const done = await store.tasks.count({ workspaceId: saved.workspaceId, projectId, deletedAt: null, status: "done" });
+    return toDTO(saved, total, done);
   });
 }
 /** Explicit transactional cascades replace foreign-key deletion behavior. */

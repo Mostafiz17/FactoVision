@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import {
   PRIORITIES,
@@ -59,11 +59,11 @@ export function eventText(e: TaskEventDTO): string {
     case "due_changed": return `due date ${e.fromValue ?? "none"} → ${e.toValue ?? "none"}`;
     case "estimate_changed": return `estimate ${e.fromValue ?? "—"} → ${e.toValue ?? "—"} pts`;
     case "edited":
+      if (e.fromValue === "project") return "moved this task to another project";
       if (e.fromValue === "details") return "updated the description";
-      if (e.fromValue === "project") return `moved it to project ${e.toValue}`;
       return `renamed it to “${e.toValue}”`;
     case "labels_changed": return `labels ${e.fromLabel ?? e.fromValue ?? "none"} → ${e.toLabel ?? e.toValue ?? "none"}`;
-    case "parent_changed": return `parent ${e.fromLabel ?? e.fromValue ?? "none"} → ${e.toLabel ?? e.toValue ?? "none"}`;
+    case "parent_changed": return `parent ${e.fromLabel ?? "Previous parent"} → ${e.toLabel ?? "Updated parent"}`;
     case "commented": return "commented";
     case "dependency_added": return `added blocker “${e.toValue}”`;
     case "dependency_removed": return `removed blocker “${e.toValue}”`;
@@ -105,6 +105,8 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
   const { push } = useToast();
   const { openCreate } = useApp();
   const [detail, setDetail] = useState<TaskDetailDTO | null>(null);
+  const detailRef = useRef<TaskDetailDTO | null>(null);
+  const mutationQueue = useRef(Promise.resolve());
   const [members, setMembers] = useState<MemberDTO[]>([]);
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
   const [allTasks, setAllTasks] = useState<TaskDTO[]>([]);
@@ -119,16 +121,25 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
   const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [depPick, setDepPick] = useState("");
+  const [depSearch, setDepSearch] = useState("");
+  const [depPage, setDepPage] = useState(1);
+  const [depHasMore, setDepHasMore] = useState(false);
+  const [depLoading, setDepLoading] = useState(false);
 
   const fetchDetail = useCallback(
     (id: string, isActive: () => boolean = () => true) =>
       api<{ task: TaskDetailDTO }>(`/api/tasks/${id}`)
         .then((res) => {
           if (!isActive()) return;
+          if (detailRef.current && detailRef.current.revision > res.task.revision) return;
+          if (!detailRef.current) {
+            setTitle(res.task.title);
+            setDesc(res.task.description);
+            setEstimateText(res.task.estimatePoints === null ? "" : String(res.task.estimatePoints));
+          }
+          setError(null);
+          detailRef.current = res.task;
           setDetail(res.task);
-          setTitle(res.task.title);
-          setDesc(res.task.description);
-          setEstimateText(res.task.estimatePoints === null ? "" : String(res.task.estimatePoints));
         })
         .catch((e: unknown) => {
           if (isActive()) setError(e instanceof Error ? e.message : "Failed to load task");
@@ -142,28 +153,43 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
     void fetchDetail(taskId, () => active);
     api<{ members: MemberDTO[] }>(`/api/workspaces/${workspaceId}/members`).then((r) => { if (active) setMembers(r.members); }).catch(() => undefined);
     api<{ projects: ProjectDTO[] }>(`/api/projects?workspaceId=${workspaceId}`).then((r) => { if (active) setProjects(r.projects); }).catch(() => undefined);
-    api<{ tasks: TaskDTO[] }>(`/api/tasks?workspaceId=${workspaceId}&pageSize=100`).then((r) => { if (active) setAllTasks(r.tasks); }).catch(() => undefined);
     return () => { active = false; };
   }, [taskId, workspaceId, fetchDetail]);
 
-  const patch = useCallback(
-    async (body: Record<string, unknown>) => {
-      if (!taskId || !detail) return;
-      const prev = detail;
-      const optimistic = { ...detail, ...(body as unknown as Partial<TaskDetailDTO>), revision: detail.revision + 1 };
-      if (Array.isArray(body.labels)) optimistic.tags = body.labels as string[];
-      setDetail(optimistic);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setDepLoading(true);
+      api<{ tasks: TaskDTO[]; pagination: { hasMore: boolean } }>(`/api/tasks?workspaceId=${workspaceId}&pageSize=50&page=${depPage}&q=${encodeURIComponent(depSearch)}`, "GET", undefined, controller.signal)
+        .then((r) => {
+          if (controller.signal.aborted) return;
+          setAllTasks((prev) => depPage === 1 ? r.tasks : [...prev, ...r.tasks.filter((t) => !prev.some((p) => p.id === t.id))]);
+          setDepHasMore(r.pagination.hasMore);
+        }).catch((e: unknown) => {
+          if (!controller.signal.aborted) push({ title: "Could not load blockers", description: e instanceof Error ? e.message : undefined, tone: "error" });
+        }).finally(() => { if (!controller.signal.aborted) setDepLoading(false); });
+    }, 150);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [workspaceId, depSearch, depPage, push]);
+
+  const patch = useCallback((body: Record<string, unknown>) => {
+    const save = async () => {
+      const current = detailRef.current;
+      if (!current) return;
       try {
-        await api(`/api/tasks/${taskId}`, "PATCH", { ...body, expectedVersion: detail.revision });
-        await fetchDetail(taskId);
+        const response = await api<{ task: TaskDTO }>(`/api/tasks/${taskId}`, "PATCH", { ...body, expectedVersion: current.revision });
+        const next = { ...(detailRef.current ?? current), ...response.task };
+        detailRef.current = next;
+        setDetail(next);
         router.refresh();
       } catch (e) {
-        setDetail(prev);
-        push({ title: "Update failed", description: e instanceof Error ? e.message : undefined, tone: "error" });
+        push({ title: "Update failed. Your draft is retained", description: e instanceof Error ? e.message : undefined, tone: "error" });
       }
-    },
-    [taskId, detail, fetchDetail, router, push],
-  );
+    };
+    const pending = mutationQueue.current.then(save);
+    mutationQueue.current = pending;
+    return pending;
+  }, [taskId, router, push]);
 
   async function removeTask() {
     if (!taskId || !detail) return;
@@ -196,8 +222,24 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
     }
   }
 
+  async function loadOlderComments() {
+    if (!detail?.commentsNextCursor || sending) return;
+    setSending(true);
+    try {
+      const page = await api<import("@/lib/domain/types").CommentPageDTO>(`/api/tasks/${taskId}/comments?cursor=${encodeURIComponent(detail.commentsNextCursor)}`);
+      const incoming = page.threads.flatMap((t) => { const { replies, ...root } = t; return [root, ...replies]; });
+      setDetail((current) => {
+        if (!current) return current;
+        const next = { ...current, comments: [...current.comments, ...incoming.filter((c) => !current.comments.some((p) => p.id === c.id))], commentsNextCursor: page.nextCursor };
+        detailRef.current = next;
+        return next;
+      });
+    } catch (e) { push({ title: "Could not load comments", description: e instanceof Error ? e.message : undefined, tone: "error" }); }
+    finally { setSending(false); }
+  }
+
   async function sendComment() {
-    if (!taskId || !comment.trim() || !detail) return;
+    if (!taskId || !comment.trim() || !detail || sending) return;
     setSending(true);
     const body = comment.trim();
     // Only keep mentions whose @Name is still present in the final text.
@@ -209,7 +251,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
     setComment("");
     try {
       const res = await api<{ comment: TaskDetailDTO["comments"][number] }>(`/api/tasks/${taskId}/comments`, "POST", { body, parentId, mentionIds: ids });
-      setDetail((d) => (d ? { ...d, comments: [...d.comments, res.comment] } : d));
+      setDetail((d) => { if (!d) return d; const next = { ...d, comments: [...d.comments, res.comment] }; detailRef.current = next; return next; });
       setReplyTo(null);
       setMentionIds([]);
       router.refresh();
@@ -360,7 +402,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-mist-600">Assignee</p>
-                    <Select value={detail.assignee?.id ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="h-8.5 py-0 text-[12.5px]">
+                    <Select aria-label="Assignee" value={detail.assignee?.id ?? ""} onChange={(e) => patch({ assigneeId: e.target.value || null })} className="h-8.5 py-0 text-[12.5px]">
                       <option value="">Unassigned</option>
                       {members.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
@@ -371,6 +413,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                     <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-mist-600">Due date</p>
                     <Input
                       type="date"
+                      aria-label="Due date"
                       className="h-8.5 py-0 text-[12.5px]"
                       value={detail.dueDate ? detail.dueDate.slice(0, 10) : ""}
                       onChange={(e) => patch({ dueDate: e.target.value || null })}
@@ -380,6 +423,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                     <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-mist-600">Estimate (pts)</p>
                     <Input
                       type="number"
+                      aria-label="Estimate points"
                       min={0}
                       max={100}
                       className="h-8.5 py-0 text-[12.5px]"
@@ -396,7 +440,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                   </div>
                   <div>
                     <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-mist-600">Project</p>
-                    <Select value={detail.projectId} onChange={(e) => patch({ projectId: e.target.value })} className="h-8.5 py-0 text-[12.5px]">
+                    <Select aria-label="Project" value={detail.projectId} onChange={(e) => patch({ projectId: e.target.value })} className="h-8.5 py-0 text-[12.5px]">
                       {projects.filter((p) => !p.archived || p.id === detail.projectId).map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
@@ -408,6 +452,8 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                   <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-mist-600">Description</p>
                   <Textarea
                     rows={4}
+                    aria-label="Description"
+                    maxLength={8000}
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
                     onBlur={() => desc !== detail.description && patch({ description: desc })}
@@ -494,8 +540,9 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                       ))}
                     </div>
                   )}
+                  <Input value={depSearch} onChange={(e) => { setDepSearch(e.target.value); setDepPage(1); }} aria-label="Search blockers" placeholder="Search all workspace tasks..." className="mt-2" />
                   <div className="mt-2 flex gap-2">
-                    <Select value={depPick} onChange={(e) => setDepPick(e.target.value)} className="h-8 flex-1 py-0 text-[12px]">
+                    <Select aria-label="Blocker" value={depPick} onChange={(e) => setDepPick(e.target.value)} className="h-8 flex-1 py-0 text-[12px]">
                       <option value="">Add a blocker…</option>
                       {depOptions.map((t) => (
                         <option key={t.id} value={t.id}>{t.title}</option>
@@ -505,6 +552,7 @@ function TaskDrawerContent({ taskId, onClose, workspaceId, onOpenTask }: {
                       <Icon name="link" size={12} /> Link
                     </Button>
                   </div>
+                  {depHasMore && <Button variant="outline" size="sm" disabled={depLoading} onClick={() => setDepPage((p) => p + 1)}>Load more blockers</Button>}
                   {detail.blocks.length > 0 && (
                     <p className="mt-2 text-[11.5px] text-mist-600">
                       This task blocks: {detail.blocks.map((b) => b.title).join(", ")}
@@ -668,9 +716,7 @@ function RiskBreakdown({ detail }: { detail: TaskDetailDTO }) {
           {risk.missingInputs.length > 0 && (
             <p className="mt-1 text-[11.5px] text-amber-300">Missing: {risk.missingInputs.join(", ")}</p>
           )}
-          <p className="mt-1.5 font-mono text-[10.5px] text-mist-600">
-            model v{risk.modelVersion} · config rev {risk.configRevision} · velocity {risk.velocity.pointsPerDay} pt/day ({risk.velocity.source})
-          </p>
+          <details className="mt-1.5 text-[10.5px] text-mist-500"><summary>Model methodology</summary><p>model v{risk.modelVersion} · config rev {risk.configRevision} · velocity {risk.velocity.pointsPerDay} pt/day ({risk.velocity.source})</p></details>
         </div>
       </div>
       <ul className="space-y-2.5" aria-label="Contributing factors">

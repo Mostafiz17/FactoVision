@@ -118,51 +118,51 @@ function TaskForm({ defaults: initialDefaults, onClose, workspaceId }: {
             </p>
           )}
           <div>
-            <FieldLabel>Title</FieldLabel>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ship the thing" autoFocus required maxLength={200} />
+            <FieldLabel htmlFor="taskformmodal-1">Title</FieldLabel>
+            <Input id="taskformmodal-1" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ship the thing" autoFocus required maxLength={200} />
           </div>
           <div>
-            <FieldLabel>Description</FieldLabel>
-            <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Context, acceptance criteria, links…" maxLength={8000} />
+            <FieldLabel htmlFor="taskformmodal-2">Description</FieldLabel>
+            <Textarea id="taskformmodal-2" rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Context, acceptance criteria, links…" maxLength={8000} />
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
-              <FieldLabel>Project</FieldLabel>
-              <Select value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={!!defaults.parentTaskId}>
+              <FieldLabel htmlFor="taskformmodal-3">Project</FieldLabel>
+              <Select id="taskformmodal-3" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={!!defaults.parentTaskId}>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
               </Select>
             </div>
             <div>
-              <FieldLabel>Status</FieldLabel>
-              <Select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <FieldLabel htmlFor="taskformmodal-4">Status</FieldLabel>
+              <Select id="taskformmodal-4" value={status} onChange={(event) => setStatus(event.target.value)}>
                 {STATUSES.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
               </Select>
             </div>
             <div>
-              <FieldLabel>Priority</FieldLabel>
-              <Select value={priority} onChange={(event) => setPriority(event.target.value)}>
+              <FieldLabel htmlFor="taskformmodal-5">Priority</FieldLabel>
+              <Select id="taskformmodal-5" value={priority} onChange={(event) => setPriority(event.target.value)}>
                 {PRIORITIES.map((value) => <option key={value} value={value}>{PRIORITY_LABEL[value]}</option>)}
               </Select>
             </div>
             <div>
-              <FieldLabel>Assignee</FieldLabel>
-              <Select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
+              <FieldLabel htmlFor="taskformmodal-6">Assignee</FieldLabel>
+              <Select id="taskformmodal-6" value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)}>
                 <option value="">Unassigned</option>
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
               </Select>
             </div>
             <div>
-              <FieldLabel>Estimate (pts)</FieldLabel>
-              <Input type="number" min={0} max={100} step={1} value={estimate} onChange={(event) => setEstimate(event.target.value)} placeholder="—" />
+              <FieldLabel htmlFor="taskformmodal-7">Estimate (pts)</FieldLabel>
+              <Input id="taskformmodal-7" type="number" min={0} max={100} step={1} value={estimate} onChange={(event) => setEstimate(event.target.value)} placeholder="—" />
             </div>
             <div>
-              <FieldLabel>Due date</FieldLabel>
-              <Input type="date" value={due} onChange={(event) => setDue(event.target.value)} />
+              <FieldLabel htmlFor="taskformmodal-8">Due date</FieldLabel>
+              <Input id="taskformmodal-8" type="date" value={due} onChange={(event) => setDue(event.target.value)} />
             </div>
           </div>
           <div>
-            <FieldLabel>Labels <span className="normal-case text-mist-600">(comma separated)</span></FieldLabel>
-            <Input value={labels} onChange={(event) => setLabels(event.target.value)} placeholder="frontend, perf" />
+            <FieldLabel htmlFor="taskformmodal-9">Labels <span className="normal-case text-mist-600">(comma separated)</span></FieldLabel>
+            <Input id="taskformmodal-9" value={labels} onChange={(event) => setLabels(event.target.value)} placeholder="frontend, perf" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

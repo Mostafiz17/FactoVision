@@ -1,5 +1,6 @@
 "use client";
 
+import { ChartData } from "./shared";
 import * as d3 from "d3";
 // The production bundler can drop this prototype extension from the d3 barrel.
 import "d3-transition";
@@ -47,7 +48,7 @@ export function CycleHistogram({
         .attr("x", width / 2)
         .attr("y", height / 2)
         .attr("text-anchor", "middle")
-        .attr("fill", "#6d7a99")
+        .attr("fill", "#8c9ab8")
         .style("font-size", "12px")
         .text("No completions in this window yet");
       return;
@@ -122,17 +123,18 @@ export function CycleHistogram({
       .attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).ticks(Math.min(7, bins + 1)).tickSize(4).tickFormat((v) => `${v}d`))
       .call((sel) => sel.select(".domain").attr("stroke", "#1c2947"))
-      .call((sel) => sel.selectAll("text").attr("fill", "#6d7a99").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
+      .call((sel) => sel.selectAll("text").attr("fill", "#8c9ab8").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
       .call((sel) => sel.selectAll("line").attr("stroke", "#1c2947"));
     g.append("g")
       .call(d3.axisLeft(y).ticks(4).tickSize(-w).tickPadding(8))
       .call((sel) => sel.select(".domain").remove())
-      .call((sel) => sel.selectAll("text").attr("fill", "#6d7a99").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
+      .call((sel) => sel.selectAll("text").attr("fill", "#8c9ab8").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
       .call((sel) => sel.selectAll("line").attr("stroke", "#1c2947").attr("stroke-dasharray", "2 5"));
   }, [values, p50, p85, bins, width, height]);
 
   return (
     <div ref={wrapRef} className="relative">
+      <ChartData columns={["Completion sample", "Days"]} rows={values.map((v, i) => [i + 1, v])} />
       <svg ref={svgRef} className="w-full" style={{ height }} role="img" aria-label="Cycle time distribution histogram" />
       <div ref={tipRef} className="pointer-events-none absolute z-10 rounded-lg border border-line bg-ink-800/95 px-3 py-2 opacity-0 shadow-2xl backdrop-blur transition-opacity" />
     </div>

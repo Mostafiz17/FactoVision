@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 test.describe("FactoVision core loop", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: /Ava Chen/ }).click();
+    await page.getByLabel("Email", { exact: true }).fill("ava@e2e.test");
+    await page.getByLabel("Password", { exact: true }).fill("demo1234");
+    await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
     await page.waitForURL("**/app");
   });
 
@@ -13,7 +15,7 @@ test.describe("FactoVision core loop", () => {
     await expect(page.getByRole("figure", { name: "Completion trend" })).toBeVisible();
     await expect(page.getByRole("figure", { name: "Cycle-time trend" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Deadline risk" })).toBeVisible();
-    await expect(page.getByText("Deterministic rule engine", { exact: false })).toBeVisible();
+    await expect(page.getByText("Rule-based insights", { exact: false })).toBeVisible();
   });
 
   test("create → open → complete → risk cleared", async ({ page }) => {
@@ -22,6 +24,7 @@ test.describe("FactoVision core loop", () => {
     const title = `E2E probe ${Date.now()}`;
     await page.getByPlaceholder("Ship the thing").fill(title);
     await page.getByRole("button", { name: "Create task" }).click();
+    await page.getByPlaceholder("Filter tasks…").fill(title);
     const card = page.getByRole("button", { name: title, exact: true });
     await expect(card).toBeVisible({ timeout: 15_000 });
 

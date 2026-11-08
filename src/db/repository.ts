@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/domain/errors";
 
 type Stored<T> = T & { _id: string };
 const defaults = {
+  invitations: {}, auth_limits: {},
   users: { avatarHue: 258 }, workspaces: { createdBy: null, mutationVersion: 0 }, memberships: { role: "member" },
   projects: { color: "#7c5cff", description: "", archived: 0 },
   tasks: { description: "", status: "backlog", priority: "medium", assigneeId: null, creatorId: null, parentTaskId: null, estimatePoints: null, dueDate: null, position: 0, tags: [], version: 0, startedAt: null, completedAt: null, deletedAt: null },
@@ -60,6 +61,7 @@ export function repository<K extends keyof Collections>(name: K) {
   };
 }
 export const store = {
+  invitations: repository("invitations"), authLimits: repository("auth_limits"),
   users: repository("users"), sessions: repository("sessions"), workspaces: repository("workspaces"), memberships: repository("memberships"),
   projects: repository("projects"), tasks: repository("tasks"), taskDependencies: repository("task_dependencies"), taskEvents: repository("task_events"),
   comments: repository("comments"), notifications: repository("notifications"), savedViews: repository("saved_views"), riskConfigs: repository("risk_configs"),

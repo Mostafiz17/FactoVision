@@ -41,12 +41,15 @@ export function RiskConfigCard({ workspaceId, canEdit }: { workspaceId: string; 
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let active = true;
     api<{ riskConfig: Stored }>(`/api/risk/config?workspaceId=${workspaceId}`)
       .then((r) => {
+        if (!active) return;
         setStored(r.riskConfig);
         setDraft(structuredClone(r.riskConfig.config));
       })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "Could not load the risk model"));
+      .catch((e: unknown) => { if (active) setLoadError(e instanceof Error ? e.message : "Could not load the risk model"); });
+    return () => { active = false; };
   }, [workspaceId]);
 
   const validation = draft ? riskConfigSchema.safeParse(draft) : null;
@@ -73,10 +76,8 @@ export function RiskConfigCard({ workspaceId, canEdit }: { workspaceId: string; 
     <section className="card p-5" aria-labelledby="risk-config-title" data-testid="risk-config">
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
         <h2 id="risk-config-title" className="panel-title text-[14px] font-semibold">Deadline-risk model</h2>
-        {stored && (
-          <span className="font-mono text-[10.5px] text-mist-500">
-            v{stored.modelVersion} · revision {stored.revision} · {stored.isDefault ? "defaults" : "custom"} · {stored.fingerprint}
-          </span>
+        {stored && canEdit && (
+          <details className="text-[10.5px] text-mist-500"><summary>Configuration details</summary><span>v{stored.modelVersion} · revision {stored.revision} · {stored.isDefault ? "defaults" : "custom"} · {stored.fingerprint}</span></details>
         )}
       </div>
       <p className="mb-4 text-[12px] text-mist-500">
@@ -93,8 +94,8 @@ export function RiskConfigCard({ workspaceId, canEdit }: { workspaceId: string; 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {FACTOR_KEYS.map((k) => (
                 <div key={k}>
-                  <FieldLabel>{WEIGHT_LABEL[k]}</FieldLabel>
-                  <Input type="number" min={0} max={1} step={0.05} value={draft.weights[k]} aria-label={`${WEIGHT_LABEL[k]} weight`}
+                  <FieldLabel htmlFor={`weight-${k}`}>{WEIGHT_LABEL[k]}</FieldLabel>
+                  <Input id={`weight-${k}`} type="number" min={0} max={1} step={0.05} value={draft.weights[k]} aria-label={`${WEIGHT_LABEL[k]} weight`}
                     onChange={(e) => setDraft({ ...draft, weights: { ...draft.weights, [k]: Number(e.target.value) } })} />
                 </div>
               ))}
@@ -105,19 +106,19 @@ export function RiskConfigCard({ workspaceId, canEdit }: { workspaceId: string; 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {PARAMS.map((p) => (
                 <div key={p.key}>
-                  <FieldLabel>{p.label}</FieldLabel>
-                  <Input type="number" step={p.step} value={draft.params[p.key]} aria-label={p.label}
+                  <FieldLabel htmlFor={`param-${p.key}`}>{p.label}</FieldLabel>
+                  <Input id={`param-${p.key}`} type="number" step={p.step} value={draft.params[p.key]} aria-label={p.label}
                     onChange={(e) => setDraft({ ...draft, params: { ...draft.params, [p.key]: Number(e.target.value) } })} />
                 </div>
               ))}
               <div>
-                <FieldLabel>Medium from (score)</FieldLabel>
-                <Input type="number" value={draft.bands.mediumFrom} aria-label="Medium band threshold"
+                <FieldLabel htmlFor="medium-threshold">Medium from (score)</FieldLabel>
+                <Input id="medium-threshold" type="number" value={draft.bands.mediumFrom} aria-label="Medium band threshold"
                   onChange={(e) => setDraft({ ...draft, bands: { ...draft.bands, mediumFrom: Number(e.target.value) } })} />
               </div>
               <div>
-                <FieldLabel>High from (score)</FieldLabel>
-                <Input type="number" value={draft.bands.highFrom} aria-label="High band threshold"
+                <FieldLabel htmlFor="high-threshold">High from (score)</FieldLabel>
+                <Input id="high-threshold" type="number" value={draft.bands.highFrom} aria-label="High band threshold"
                   onChange={(e) => setDraft({ ...draft, bands: { ...draft.bands, highFrom: Number(e.target.value) } })} />
               </div>
             </div>

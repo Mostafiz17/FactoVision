@@ -144,6 +144,7 @@ export interface TaskDetailDTO extends TaskDTO {
   subtasks: TaskDTO[];
   events: TaskEventDTO[];
   comments: CommentDTO[];
+  commentsNextCursor?: string | null;
 }
 export interface TaskPagination {
   page: number;
@@ -231,8 +232,8 @@ export interface ForecastDTO {
   p50Daily: number;
   p85Daily: number;
   ewmaLast: number;
-  optimisticDays: number;
-  conservativeDays: number;
+  optimisticDays: number | null;
+  conservativeDays: number | null;
 }
 /** Deadline-risk model v2 result (see src/lib/risk/model.ts and RISK.md). */
 import type {

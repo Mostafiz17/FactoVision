@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import type { DailyPoint } from "@/lib/domain/types";
 import { fmtDate } from "@/lib/utils";
-import { ChartTip, LegendToggle } from "./shared";
+import { ChartData, ChartTip, LegendToggle } from "./shared";
 
 export function ThroughputChart({ data, height = 250 }: { data: DailyPoint[]; height?: number }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -43,6 +43,7 @@ export function ThroughputChart({ data, height = 250 }: { data: DailyPoint[]; he
           onToggle={toggle}
         />
       </div>
+      <ChartData columns={["Day", "Created", "Completed", "Reopened", "Trend"]} rows={data.map((d) => [d.date, d.created, d.completed, d.reopened, d.ewma])} />
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -26 }} barGap={1}>
           <defs>

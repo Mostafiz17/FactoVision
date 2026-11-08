@@ -1,3 +1,5 @@
+import { encodeCursor } from "@/lib/domain/notifications";
+import { cache } from "react";
 import { store, memberUsers, insertNotifications, workspaceTransaction } from "@/db/repository";
 import type { Filter, Sort } from "mongodb";
 import type { DbMembership, DbTask } from "@/db/schema";
@@ -98,9 +100,9 @@ async function lockAuthorizedTask(userId: string, taskId: string, allowDeleted: 
 /** Risk results for the workspace's open tasks (model v2, shared with analytics and the dashboard). */
 type RiskCtx = Map<string, RiskAssessment>;
 
-async function buildRiskContext(workspaceId: string): Promise<RiskCtx> {
+const buildRiskContext = cache(async (workspaceId: string): Promise<RiskCtx> => {
   return (await workspaceRisk(workspaceId)).results;
-}
+});
 
 interface DepIndex {
   blockedBy: Map<string, DependencyLite[]>;
@@ -189,13 +191,13 @@ function toDTO(
   };
 }
 
-async function decorateTasks(workspaceId: string, rows: DbTask[]): Promise<TaskDTO[]> {
+async function decorateTasks(workspaceId: string, rows: DbTask[], riskContext?: RiskCtx): Promise<TaskDTO[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((t) => t.id);
   const [members, deps, ctx, children] = await Promise.all([
     memberMap(workspaceId),
     dependencyIndex(workspaceId, ids),
-    buildRiskContext(workspaceId),
+    riskContext ?? buildRiskContext(workspaceId),
     subtaskCounts(workspaceId, ids),
   ]);
   return rows.map((t) => toDTO(t, members, deps, ctx, children));
@@ -215,7 +217,7 @@ export function queryPredicates(query: TaskListQuery): Filter<DbTask> {
   if (query.label) filter.tags = query.label.toLowerCase();
   if (query.q) {
     const expression = query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    filter.$or = [{ title: { $regex: expression, $options: "i" } }, { description: { $regex: expression, $options: "i" } }];
+    filter.$or = [{ title: { $regex: expression, $options: "i" } }, { description: { $regex: expression, $options: "i" } }, { tags: { $regex: expression, $options: "i" } }];
   }
   return filter;
 }
@@ -234,6 +236,16 @@ export async function listTaskPage(userId: string, query: TaskListQuery): Promis
   await requireMembership(userId, query.workspaceId);
   const filter = queryPredicates(query);
   const total = await store.tasks.count(filter);
+  if (query.sort === "risk") {
+    const context = await buildRiskContext(query.workspaceId);
+    const matches = await store.tasks.aggregate<{ id: string }>([{ $match: filter }, { $project: { _id: 0, id: 1 } }]);
+    matches.sort((a, b) => (context.get(b.id)?.score ?? -1) - (context.get(a.id)?.score ?? -1) || a.id.localeCompare(b.id));
+    const ids = matches.slice((query.page - 1) * query.pageSize, query.page * query.pageSize).map((t) => t.id);
+    const rows = await store.tasks.find({ workspaceId: query.workspaceId, id: { $in: ids } });
+    const byId = new Map(rows.map((t) => [t.id, t]));
+    const totalPages = Math.ceil(total / query.pageSize);
+    return { tasks: await decorateTasks(query.workspaceId, ids.flatMap((id) => byId.has(id) ? [byId.get(id)!] : []), context), pagination: { page: query.page, pageSize: query.pageSize, total, totalPages, hasMore: query.page < totalPages } };
+  }
   // Mongo string ordering differs from the former enum ordering. Explicit ranks
   // preserve board columns and urgent > high > medium > low priority ordering.
   const order = query.sort === "priority" || query.sort === "position" || query.sort === "due";
@@ -264,12 +276,16 @@ function displayEventValue(
 export async function getTaskDetail(userId: string, taskId: string): Promise<TaskDetailDTO> {
   const task = await loadTask(userId, taskId, null, true);
   const ws = task.workspaceId;
-  const [subtasks, parentRows, eventRows, commentRows] = await Promise.all([
+  const [subtasks, parentRows, eventRows, topComments] = await Promise.all([
     store.tasks.find({ workspaceId: ws, parentTaskId: taskId, deletedAt: null }, { sort: { position: 1, createdAt: 1 } }),
     task.parentTaskId ? store.tasks.find({ id: task.parentTaskId, workspaceId: ws }, { limit: 1 }) : Promise.resolve([]),
     store.taskEvents.find({ workspaceId: ws, taskId }, { sort: { createdAt: -1, id: -1 }, limit: 120 }),
-    store.comments.find({ workspaceId: ws, taskId }, { sort: { createdAt: 1, id: 1 } }),
+    store.comments.find({ workspaceId: ws, taskId, parentCommentId: null }, { sort: { createdAt: 1, id: 1 }, limit: 21 }),
   ]);
+  const roots = topComments.slice(0, 20);
+  const replies = await store.comments.find({ workspaceId: ws, taskId, parentCommentId: { $in: roots.map((c) => c.id) } }, { sort: { createdAt: 1, id: 1 } });
+  const commentRows = [...roots, ...replies];
+  const lastComment = roots[roots.length - 1];
   const allRelevant = [task, ...subtasks];
   const visibleIds = allRelevant.map((t) => t.id);
   if (task.parentTaskId) visibleIds.push(task.parentTaskId);
@@ -313,6 +329,7 @@ export async function getTaskDetail(userId: string, taskId: string): Promise<Tas
     subtasks: subtasks.map((t) => toDTO(t, members, deps, ctx, counts)),
     events,
     comments: commentsDTO,
+    commentsNextCursor: topComments.length > 20 && lastComment ? encodeCursor({ createdAt: lastComment.createdAt, id: lastComment.id }) : null,
   };
 }
 
@@ -487,6 +504,8 @@ export async function updateTask(
       events.push(toEventRow(task, userId, type, from, to, now));
 
     if (input.restore && task.deletedAt) {
+      await assertProject(task.workspaceId, input.projectId ?? task.projectId);
+      await assertParentTask(task.workspaceId, input.projectId ?? task.projectId, input.parentTaskId !== undefined ? input.parentTaskId : task.parentTaskId, task.id);
       updates.deletedAt = null;
       ev("restored", null, null);
     }
@@ -614,6 +633,8 @@ export async function bulkAction(
         updates = { deletedAt: now };
         events.push(toEventRow(task, userId, "deleted", null, null, now));
       } else if (input.action === "restore" && task.deletedAt) {
+        await assertProject(task.workspaceId, task.projectId);
+        await assertParentTask(task.workspaceId, task.projectId, task.parentTaskId, task.id);
         updates = { deletedAt: null };
         events.push(toEventRow(task, userId, "restored", null, null, now));
       } else if (input.action === "status" && input.status && input.status !== task.status && !task.deletedAt) {
@@ -628,6 +649,13 @@ export async function bulkAction(
       const saved = await store.tasks.update({ id, workspaceId: input.workspaceId, version: task.version }, { ...updates, updatedAt: now, version: task.version + 1 });
       if (!saved) throw new ApiError(409, "Task changed concurrently; refresh and retry");
       await recordEvents(events);
+      const recipient = updates.assigneeId !== undefined ? updates.assigneeId : task.assigneeId;
+      if (recipient && (input.action === "assign" || input.action === "status")) {
+        await notifyUsers([{ workspaceId: task.workspaceId, userId: recipient, actorId: userId, taskId: id,
+          kind: input.action === "assign" ? "assigned" : "status",
+          message: input.action === "assign" ? 'assigned you “' + task.title + '”' : 'moved “' + task.title + '” to ' + input.status?.replace("_", " "),
+          dedupeKey: input.action === "assign" ? 'assigned:' + id + ':' + recipient + ':' + saved.version : 'status:' + id + ':' + saved.version }]);
+      }
       expected.push({ id, revision: task.version + 1 });
       affected++;
     }

@@ -4,7 +4,6 @@ import { memberUsers, store, workspaceTransaction } from "@/db/repository";
 import type { MemberDTO, SavedViewDTO, ViewConfig, WorkspaceDTO } from "@/lib/domain/types";
 import { ensureCan, requireMembership } from "@/server/auth/guard";
 import { ROLE_RANK } from "@/server/auth/permissions";
-import { hashPassword } from "@/server/auth/password";
 import { isUniqueViolation } from "@/server/db-errors";
 import { ApiError } from "@/server/http";
 import { viewConfigSchema } from "@/server/validation";
@@ -42,24 +41,27 @@ export async function listMembers(userId: string, workspaceId: string): Promise<
 export async function inviteMember(
   actorId: string, workspaceId: string,
   input: { email: string; name?: string; role: "admin" | "project_manager" | "member" },
-): Promise<{ member: MemberDTO; tempPassword: string | null }> {
-  const tempPassword = randomBytes(9).toString("base64url");
-  const passwordHash = await hashPassword(tempPassword);
+): Promise<{ member: MemberDTO | null; pending: boolean; email: string }> {
   try {
     return await workspaceTransaction(workspaceId, async () => {
       const actor = await requireMembership(actorId, workspaceId);
       ensureCan(actor.role, "workspace.member.invite");
-      const found = await store.users.one({ email: input.email });
-      const user = found ?? await store.users.insert({ email: input.email, name: input.name ?? input.email.split("@")[0], passwordHash, avatarHue: Math.floor(Math.random() * 360) });
+      const user = await store.users.one({ email: input.email });
+      if (!user) {
+        await store.invitations.remove({ workspaceId, email: input.email });
+        await store.invitations.insert({ workspaceId, email: input.email, role: input.role, invitedBy: actorId, expiresAt: new Date(Date.now() + 7 * 86400000) });
+        return { member: null, pending: true, email: input.email };
+      }
       if (await store.memberships.one({ workspaceId, userId: user.id })) throw new ApiError(409, "This person is already a member");
       await store.memberships.insert({ workspaceId, userId: user.id, role: input.role });
-      return { member: { id: user.id, name: user.name, email: user.email, avatarHue: user.avatarHue, role: input.role }, tempPassword: found ? null : tempPassword };
+      return { member: { id: user.id, name: user.name, email: user.email, avatarHue: user.avatarHue, role: input.role }, pending: false, email: user.email };
     });
   } catch (e) {
     if (isUniqueViolation(e)) throw new ApiError(409, "This person is already a member");
     throw e;
   }
 }
+
 export async function changeMemberRole(actorId: string, workspaceId: string, targetUserId: string, role: "admin" | "project_manager" | "member"): Promise<void> {
   await workspaceTransaction(workspaceId, async () => {
     const actor = await requireMembership(actorId, workspaceId);
@@ -80,6 +82,11 @@ export async function removeMember(actorId: string, workspaceId: string, targetU
       ensureCan(actor.role, "workspace.member.remove");
       if (target.role === "owner") throw new ApiError(400, "The owner cannot be removed");
       if (ROLE_RANK[target.role] >= ROLE_RANK[actor.role]) throw new ApiError(403, "Cannot remove a member with an equal or higher role");
+    }
+    const tasks = await store.tasks.find({ workspaceId, assigneeId: targetUserId });
+    for (const task of tasks) {
+      await store.tasks.update({ id: task.id, workspaceId }, { assigneeId: null, version: task.version + 1, updatedAt: new Date() });
+      await store.taskEvents.insert({ workspaceId, taskId: task.id, actorId, type: "assigned", fromValue: targetUserId, toValue: null });
     }
     await store.memberships.remove({ workspaceId, userId: targetUserId });
   });

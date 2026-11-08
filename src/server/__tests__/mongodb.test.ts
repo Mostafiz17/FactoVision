@@ -29,8 +29,9 @@ async function fixture() {
   const owner = await account();
   const ws = (await listWorkspaces(owner.id))[0];
   const project = await createProject(owner.id, { workspaceId: ws.id, name: "Project", color: "#123456" });
-  const member = await inviteMember(owner.id, ws.id, { email: email(), role: "member" });
-  return { owner, ws, project, member: member.member };
+  const recipient = await account();
+  const member = await inviteMember(owner.id, ws.id, { email: recipient.email, role: "member" });
+  return { owner, ws, project, member: member.member! };
 }
 
 describe("native MongoDB repositories and indexes", () => {
@@ -128,7 +129,8 @@ describe("MongoDB authentication and membership", () => {
   });
   it("keeps role changes owner-only and revokes access when membership is removed", async () => {
     const { owner, ws, member } = await fixture();
-    const admin = (await inviteMember(owner.id, ws.id, { email: email(), role: "admin" })).member;
+    const adminAccount = await account();
+    const admin = (await inviteMember(owner.id, ws.id, { email: adminAccount.email, role: "admin" })).member!;
     await expect(changeMemberRole(member.id, ws.id, member.id, "admin")).rejects.toMatchObject({ status: 403 });
     await expect(changeMemberRole(admin.id, ws.id, member.id, "admin")).rejects.toMatchObject({ status: 403 });
     await changeMemberRole(owner.id, ws.id, member.id, "project_manager");

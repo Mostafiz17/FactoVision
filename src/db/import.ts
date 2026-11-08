@@ -18,7 +18,8 @@ export function normalizeSnapshot(input: unknown): Snapshot {
   const source = input as Record<string, unknown>;
   const result = {} as Snapshot;
   for (const name of names) {
-    const rows = source[name];
+    // Operational collections were added after the original snapshot format.
+    const rows = source[name] ?? (["invitations", "auth_limits"].includes(name) ? [] : undefined);
     if (!Array.isArray(rows)) throw new Error("Snapshot must include array: " + name);
     result[name] = rows.map((raw: unknown) => {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid document in " + name);
@@ -38,7 +39,7 @@ export function normalizeSnapshot(input: unknown): Snapshot {
       if (name === "task_dependencies" && !row.id) row.id = randomUUID();
       if (name === "risk_configs" && !row.id) row.id = row.workspaceId;
       if (name === "risk_configs" && !row.createdAt) row.createdAt = row.updatedAt;
-      const pattern = name === "sessions" ? /^[0-9a-f]{64}$/ : uuid;
+      const pattern = name === "sessions" || name === "auth_limits" ? /^[0-9a-f]{64}$/ : uuid;
       if (typeof row.id !== "string" || !pattern.test(row.id)) throw new Error("Invalid ID in " + name);
       if (!(row.createdAt instanceof Date)) throw new Error("Missing createdAt in " + name);
       if (row._id !== undefined && row._id !== row.id) throw new Error("ID mismatch in " + name);
@@ -50,7 +51,7 @@ export function normalizeSnapshot(input: unknown): Snapshot {
   const byId = (name: keyof Collections, id: unknown) => result[name].find((row) => row.id === id);
   const references: Record<string, keyof Collections> = {
     userId: "users", assigneeId: "users", creatorId: "users", authorId: "users", actorId: "users", createdBy: "users", updatedBy: "users",
-    workspaceId: "workspaces", projectId: "projects", taskId: "tasks", dependsOnId: "tasks", parentTaskId: "tasks", parentCommentId: "comments",
+    workspaceId: "workspaces", projectId: "projects", taskId: "tasks", dependsOnId: "tasks", parentTaskId: "tasks", parentCommentId: "comments", invitedBy: "users",
   };
   for (const [name, rows] of Object.entries(result)) for (const row of rows) {
     for (const [field, target] of Object.entries(references)) {

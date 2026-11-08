@@ -108,7 +108,7 @@ export function ProjectsClient({ projects, workspaceId, role }: { projects: Proj
 
       {visible.length === 0 ? (
         <EmptyState icon="folder" title="No projects yet" body="Projects group tasks and give the analytics a spine."
-          action={<Button size="sm" onClick={() => openEditor("new")}><Icon name="plus" size={13} /> Create the first project</Button>} />
+          action={canCreate ? <Button size="sm" onClick={() => openEditor("new")}><Icon name="plus" size={13} /> Create the first project</Button> : undefined} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((p, i) => {
@@ -166,23 +166,23 @@ export function ProjectsClient({ projects, workspaceId, role }: { projects: Proj
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing === "new" ? "New project" : "Edit project"} subtitle="Color and key flow through boards, cards and charts.">
         <div className="space-y-4">
           <div>
-            <FieldLabel>Name</FieldLabel>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Atlas Web App" autoFocus maxLength={200} />
+            <FieldLabel htmlFor="projectsclient-1">Name</FieldLabel>
+            <Input id="projectsclient-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Atlas Web App" autoFocus maxLength={200} />
           </div>
           <div>
-            <FieldLabel>Color</FieldLabel>
+            <FieldLabel htmlFor="projectsclient-color">Color</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {CHART_COLORS.map((c) => (
                 <button key={c} onClick={() => setColor(c)} aria-label={`Color ${c}`}
                   className={cn("h-8 w-8 rounded-lg border-2 transition-transform", color === c ? "scale-110 border-white" : "border-transparent hover:scale-105")}
                   style={{ background: c }} />
               ))}
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded-lg border border-line bg-ink-900" aria-label="Custom color" />
+              <input id="projectsclient-color" type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded-lg border border-line bg-ink-900" aria-label="Custom color" />
             </div>
           </div>
           <div>
-            <FieldLabel>Description</FieldLabel>
-            <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={8000} placeholder="What ships from here?" />
+            <FieldLabel htmlFor="projectsclient-description">Description</FieldLabel>
+            <Textarea id="projectsclient-description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={8000} placeholder="What ships from here?" />
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>

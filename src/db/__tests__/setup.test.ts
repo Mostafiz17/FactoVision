@@ -42,6 +42,32 @@ describe("safe MongoDB initialization", () => {
     expect(await database.collection("users").find().toArray()).toEqual(before);
     expect(await database.collection("users").listIndexes().toArray()).toEqual(indexes);
   });
+  it("upgrades the pre-remediation schema without changing existing records or collection metadata", async () => {
+    const reference = (await getClient()).db("cadence_upgrade_reference_" + randomUUID().replaceAll("-", ""));
+    await setupDatabase(reference);
+    const added = new Set(["invitations", "auth_limits"]);
+    const legacy = Object.keys(INDEXES).filter((name) => !added.has(name));
+    for (const name of legacy) {
+      const metadata = await reference.listCollections({ name }, { nameOnly: false }).next();
+      await database.createCollection(name, { validator: metadata?.options?.validator });
+      const indexes = (await reference.collection(name).listIndexes().toArray()).filter((index) => index.name !== "_id_");
+      await database.collection(name).createIndexes(indexes);
+    }
+    const id = randomUUID();
+    await database.collection<{ _id: string; [field: string]: unknown }>("users").insertOne({ _id: id, id, email: "upgrade@example.test", name: "Preserve", passwordHash: "synthetic-hash", createdAt: new Date() });
+    const before = await database.collection("users").find().toArray();
+    const metadataBefore = await database.listCollections().toArray();
+    const indexesBefore = await Promise.all(legacy.map((name) => database.collection(name).listIndexes().toArray()));
+    await expect(verifyDatabase(database)).rejects.toMatchObject({ code: 26, message: expect.stringContaining('"invitations"') });
+    expect((await database.listCollections().toArray()).map((row) => row.name).sort()).toEqual([...legacy].sort());
+    await setupDatabase(database);
+    await expect(verifyDatabase(database)).resolves.toBeUndefined();
+    expect(await database.collection("users").find().toArray()).toEqual(before);
+    const metadataAfter = await database.listCollections().toArray();
+    for (const old of metadataBefore) expect(metadataAfter.find((row) => row.name === old.name)).toEqual(old);
+    expect(await Promise.all(legacy.map((name) => database.collection(name).listIndexes().toArray()))).toEqual(indexesBefore);
+    for (const name of added) expect(await database.collection(name).countDocuments()).toBe(0);
+  });
   it("initializes an empty collection without a validator using the declared schema", async () => {
     await database.createCollection("users");
     await setupDatabase(database);

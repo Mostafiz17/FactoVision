@@ -4,6 +4,7 @@ import { store } from "@/db/repository";
 import type { DbUser } from "@/db/schema";
 import { DAY_MS } from "@/lib/domain/dates";
 import { generateToken, hashToken } from "./tokens";
+import { demoEnabled, isDemoAccount } from "./demo";
 
 export { generateToken, hashToken } from "./tokens";
 
@@ -48,5 +49,6 @@ export async function getSessionUser(): Promise<DbUser | null> {
   // TTL cleanup is asynchronous; expiration is always enforced on the read path.
   const row = await store.sessions.one({ id: hashToken(token), expiresAt: { $gt: new Date() } });
   if (!row) return null;
-  return store.users.one({ id: row.userId });
+  const user = await store.users.one({ id: row.userId });
+  return user && (!isDemoAccount(user.email) || demoEnabled()) ? user : null;
 }

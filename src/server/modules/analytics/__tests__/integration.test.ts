@@ -130,7 +130,7 @@ beforeAll(async () => {
   );
 
   await store.taskDependencies.insertMany(
-    FIXTURE_EDGES.map((e) => ({ workspaceId: wsId, taskId: idOf(e.taskId), dependsOnId: idOf(e.dependsOnId) })),
+    FIXTURE_EDGES.map((e) => ({ workspaceId: wsId, taskId: idOf(e.taskId), dependsOnId: idOf(e.dependsOnId), createdAt: new Date("2026-03-01T00:00:00Z") })),
   );
 });
 

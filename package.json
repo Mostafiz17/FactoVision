@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:setup": "tsx scripts/db-setup.ts",
     "seed": "tsx scripts/seed.ts",
-    "db:import": "tsx scripts/import-data.ts"
+    "db:import": "tsx scripts/import-data.ts",
+    "test:e2e": "node scripts/browser-regression.mjs"
   },
   "dependencies": {
     "@next/env": "^16.4.5",

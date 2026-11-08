@@ -56,7 +56,7 @@ export async function addComment(userId: string, taskId: string, input: AddComme
     const verb = { mention: "mentioned you in", reply: "replied to your comment on", comment: "commented on" } as const;
     await insertNotifications(recipients.map((r) => ({
       workspaceId: task.workspaceId, userId: r.userId, actorId: userId, taskId, kind: r.kind,
-      message: verb[r.kind] + " ?" + task.title + "?",
+      message: verb[r.kind] + " “" + task.title + "”",
       dedupeKey: commentDedupeKey({ taskId, actorId: userId, parentId, body: input.body, at: now }), createdAt: now,
     })));
     return toCommentDTO(row, members);
@@ -92,7 +92,7 @@ export async function listActivityPage(userId: string, q: ActivityQuery): Promis
   ]);
   const pageRows = rows.slice(0, q.limit);
   const members = await memberMap(q.workspaceId);
-  const label = (type: string, v: string | null) => type === "assigned" ? (v ? members.get(v)?.name ?? v : "Unassigned") : v;
+  const label = (type: string, v: string | null) => type === "assigned" ? (v ? members.get(v)?.name ?? "Former member" : "Unassigned") : type === "parent_changed" ? (v ? "Parent task" : "No parent") : v;
   const items: ActivityDTO[] = pageRows.map(({ e, taskTitle }) => ({
     id: e.id, type: e.type, fromValue: e.fromValue, toValue: e.toValue, fromLabel: label(e.type, e.fromValue), toLabel: label(e.type, e.toValue),
     createdAt: e.createdAt.toISOString(), taskId: e.taskId, taskTitle, actor: e.actorId ? members.get(e.actorId) ?? null : null,
@@ -115,7 +115,6 @@ export interface NotificationQuery { workspaceId: string; cursor?: string; limit
 export async function listNotificationPage(userId: string, q: NotificationQuery): Promise<NotificationPageDTO> {
   await requireMembership(userId, q.workspaceId);
   const cursor = parseCursor(q.cursor);
-  try { await runDeadlineSweep(userId, q.workspaceId); } catch { console.error("[notifications] deadline sweep failed"); }
   const scope = { workspaceId: q.workspaceId, userId };
   const filter: Filter<DbNotification> = { ...scope, ...(q.unreadOnly ? { readAt: null } : {}), ...(cursor ? cursorFilter(cursor, "older") : {}) };
   const rows = await store.notifications.find(filter, { sort: { createdAt: -1, id: -1 }, limit: q.limit + 1 });
@@ -135,7 +134,7 @@ export async function listNotifications(userId: string, workspaceId: string): Pr
 export async function setReadState(userId: string, workspaceId: string, ids: string[] | undefined, read: boolean): Promise<{ updated: number }> {
   return workspaceTransaction(workspaceId, async () => {
     await requireMembership(userId, workspaceId);
-    const filter: Filter<DbNotification> = { workspaceId, userId, readAt: read ? null : { $ne: null }, ...(ids?.length ? { id: { $in: ids } } : {}) };
+    const filter: Filter<DbNotification> = { workspaceId, userId, readAt: read ? null : { $ne: null }, ...(ids !== undefined ? { id: { $in: ids } } : {}) };
     return { updated: await store.notifications.updateMany(filter, { readAt: read ? new Date() : null }) };
   });
 }

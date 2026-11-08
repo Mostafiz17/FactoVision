@@ -10,7 +10,7 @@ const NIL = "00000000-0000-4000-8000-000000000000";
 const runId = Date.now();
 
 async function newSession() {
-  return request.newContext({ baseURL: "http://localhost:3000" });
+  return request.newContext({ baseURL: (process.env.E2E_BASE_URL ?? "http://localhost:3000") });
 }
 
 async function login(email: string, password: string) {
@@ -104,7 +104,7 @@ test.describe("full auth → workspace → membership lifecycle", () => {
     });
     expect(invite.status()).toBe(201);
     const tempForExisting = (await invite.json()).tempPassword;
-    expect(tempForExisting).toBeNull(); // existing accounts keep their own credentials
+    expect(tempForExisting).toBeUndefined(); // existing accounts keep their own credentials
 
     const memberLogin = await login(memberEmail, "password123");
 
@@ -154,12 +154,13 @@ test.describe("full auth → workspace → membership lifecycle", () => {
     const freshInvite = await memberLogin.post(`/api/workspaces/${wsA}/members`, { data: { email: newEmail, name: "Fresh Four", role: "member" } });
     expect(freshInvite.status()).toBe(201);
     const freshBody = await freshInvite.json();
-    expect(typeof freshBody.tempPassword).toBe("string");
-    expect(freshBody.tempPassword.length).toBeGreaterThan(8);
-    const freshId = freshBody.member.id;
-
-    // fresh account can log in with the one-time credential
-    const freshLogin = await login(newEmail, freshBody.tempPassword);
+    expect(freshBody.tempPassword).toBeUndefined();
+    expect(freshBody.pending).toBe(true);
+    expect(freshBody.member).toBeNull();
+    const freshLogin = await newSession();
+    const registration = await freshLogin.post("/api/auth/register", { data: { email: newEmail, name: "Recipient", password: "recipient-password" } });
+    expect(registration.status()).toBe(201);
+    const freshId = (await registration.json()).user.id;
     expect((await freshLogin.get(`/api/tasks?workspaceId=${wsA}`)).status()).toBe(200);
 
     /* ---- owner protection & rank rules ---- */
@@ -196,7 +197,7 @@ test.describe("cross-workspace isolation (tenant B vs seeded tenant A)", () => {
   test.setTimeout(90_000);
 
   test("reads and mutations against another tenant's workspace are 404", async () => {
-    const ava = await login("ava@cadence.dev", "demo1234");
+    const ava = await login("ava@e2e.test", "demo1234");
     const me = await (await ava.get("/api/auth/me")).json();
     const wsA = me.workspaces[0].id;
     const tasksA = await (await ava.get(`/api/tasks?workspaceId=${wsA}`)).json();
@@ -257,7 +258,7 @@ test.describe("cross-workspace isolation (tenant B vs seeded tenant A)", () => {
 
 test.describe("input validation & CSRF", () => {
   test("Zod rejects malformed input with 400 and cross-origin mutations with 403", async () => {
-    const ava = await login("ava@cadence.dev", "demo1234");
+    const ava = await login("ava@e2e.test", "demo1234");
     const me = await (await ava.get("/api/auth/me")).json();
     const wsA = me.workspaces[0].id;
     const projectsA = await (await ava.get(`/api/projects?workspaceId=${wsA}`)).json();

@@ -96,7 +96,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
     eligibility: "Open tasks at asOf. Deleted blockers do not block.",
     boundary: "Snapshot at asOf; blocker status is replayed to asOf.",
     limitations: [
-      "Dependency edges are current-state: a dependency added after asOf still applies when replaying an earlier asOf.",
+      "Dependency edges are current-state: edges created after asOf are excluded; removed edges cannot be reconstructed.",
       "Time spent blocked is not measured: dependency events record the blocker title, not its id.",
     ],
   },
@@ -104,7 +104,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
 
 export const GLOBAL_LIMITATIONS: string[] = [
   "Analytics replay the append-only event log up to asOf for status, deletion and completions. Project, assignee, priority, labels, due dates and estimates are current values.",
-  "Dependency edges are current-state (see blocked-task limitation).",
+  "Only current dependency edges created by asOf are included; removed edges cannot be reconstructed.",
   "Events sharing the same millisecond are ordered by type (created first) and then by id; this is deterministic but arbitrary.",
   "Metrics describe what was recorded. They do not measure effort, quality or individual performance.",
 ];

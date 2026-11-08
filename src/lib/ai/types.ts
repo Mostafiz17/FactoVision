@@ -40,6 +40,7 @@ export interface InsightItem {
 export interface InsightsDTO {
   mode: "deterministic" | "ai";
   provider: string;
+  providerAttempted?: boolean;
   generatedAt: string;
   insights: InsightItem[];
   /** Model outputs rejected by validation (unknown/missing citations, bad shape). */
@@ -87,7 +88,7 @@ export function validateInsights(raw: unknown, bundle: EvidenceBundle): Validate
       continue;
     }
     const refs = item.data.evidenceRefs.filter((r) => factIds.has(r));
-    if (refs.length === 0) {
+    if (refs.length === 0 || refs.length !== item.data.evidenceRefs.length) {
       droppedInvalid += 1; // recommendation without supplied evidence is not shown
       continue;
     }

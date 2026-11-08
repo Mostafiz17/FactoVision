@@ -143,9 +143,9 @@ describe("forecast", () => {
     expect(f.conservativeDays).toBe(4);
     expect(f.optimisticDays).toBe(2);
   });
-  it("empty backlog clears instantly; zero throughput is Infinity, not a fake number", () => {
+  it("empty backlog clears instantly; zero throughput has no finite forecast, with a JSON-safe null", () => {
     expect(forecast(0, [0, 0], 0.3).conservativeDays).toBe(0);
-    expect(forecast(5, [0, 0, 0], 0.3).conservativeDays).toBe(Infinity);
+    expect(forecast(5, [0, 0, 0], 0.3).conservativeDays).toBeNull();
   });
 });
 

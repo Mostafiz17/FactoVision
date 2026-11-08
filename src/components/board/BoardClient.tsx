@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import {
   PRIORITIES,
@@ -65,6 +65,7 @@ export function BoardClient({
   projects,
   members,
   views: serverViews,
+  labels,
   workspaceId,
   initialQ,
   initialProjectId = "",
@@ -74,6 +75,7 @@ export function BoardClient({
   projects: ProjectDTO[];
   members: MemberDTO[];
   views: SavedViewDTO[];
+  labels: string[];
   workspaceId: string;
   initialQ: string;
   initialProjectId?: string;
@@ -84,6 +86,8 @@ export function BoardClient({
   const [tasks, setTasks] = useState(serverTasks);
   const [pagination, setPagination] = useState(serverPagination);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [queryLoading, setQueryLoading] = useState(false);
+  const queryGeneration = useRef(0);
   const [filters, setFilters] = useState<Filters>({ ...DEFAULT_FILTERS, q: initialQ, projectId: initialProjectId });
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
@@ -129,25 +133,36 @@ export function BoardClient({
       setFilters((f) => ({
         ...f,
         ...(qChanged ? { q: initialQ } : {}),
-        ...(projectChanged && initialProjectId ? { projectId: initialProjectId } : {}),
+        ...(projectChanged ? { projectId: initialProjectId } : {}),
       }));
     }
   }
 
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort(), [tasks]);
+  const allTags = labels;
 
-  const filtered = useMemo(() => {
-    const q = filters.q.trim().toLowerCase();
-    return tasks.filter((t) => {
-      if (q && !t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q) && !t.labels.some((label) => label.includes(q))) return false;
-      if (filters.projectId && t.projectId !== filters.projectId) return false;
-      if (filters.assigneeId === "none" ? t.assignee !== null : filters.assigneeId && t.assignee?.id !== filters.assigneeId) return false;
-      if (filters.priority && t.priority !== filters.priority) return false;
-      if (filters.tag && !t.labels.includes(filters.tag)) return false;
-      return true;
-    });
-  }, [tasks, filters]);
+  const filtered = tasks;
+  const query = new URLSearchParams({ workspaceId, pageSize: "50", sort: filters.sort === "manual" ? "position" : filters.sort });
+  if (filters.q) query.set("q", filters.q);
+  if (filters.projectId) query.set("projectId", filters.projectId);
+  if (filters.assigneeId) query.set("assigneeId", filters.assigneeId);
+  if (filters.priority) query.set("priority", filters.priority);
+  if (filters.tag) query.set("label", filters.tag);
+  const queryString = query.toString();
+  useEffect(() => {
+    const controller = new AbortController();
+    const generation = ++queryGeneration.current;
+    const timer = window.setTimeout(() => {
+      setQueryLoading(true);
+      api<TaskPageDTO>("/api/tasks?" + queryString, "GET", undefined, controller.signal).then((page) => {
+        if (generation !== queryGeneration.current || controller.signal.aborted) return;
+        setTasks(page.tasks); setPagination(page.pagination); setSelection(new Set());
+      }).catch((e: unknown) => {
+        if (!controller.signal.aborted) push({ title: "Could not filter tasks", description: e instanceof Error ? e.message : undefined, tone: "error" });
+      }).finally(() => { if (!controller.signal.aborted) setQueryLoading(false); });
+    }, 150);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [queryString, serverTasks, push]);
 
   const activeFilterCount = [filters.q, filters.projectId, filters.assigneeId, filters.priority, filters.tag].filter(Boolean).length;
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
@@ -169,10 +184,12 @@ export function BoardClient({
     if (!pagination.hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
+      const generation = queryGeneration.current;
       const nextPage = pagination.page + 1;
       const result = await api<TaskPageDTO>(
-        `/api/tasks?workspaceId=${workspaceId}&page=${nextPage}&pageSize=${pagination.pageSize}&sort=position`,
+        `/api/tasks?${queryString}&page=${nextPage}`,
       );
+      if (generation !== queryGeneration.current) return;
       setTasks((current) => {
         const known = new Set(current.map((t) => t.id));
         return [...current, ...result.tasks.filter((t) => !known.has(t.id))];
@@ -186,6 +203,7 @@ export function BoardClient({
   }
 
   function handleDrop(status: TaskStatus, beforeId: string | null) {
+    if (queryLoading) return;
     const id = dragId;
     setDragId(null);
     setOverCol(null);
@@ -283,6 +301,7 @@ export function BoardClient({
     try {
       await api("/api/views", "DELETE", { workspaceId, id });
     } catch {
+      setViews((current) => current.some((v) => v.id === id) ? current : [...current, ...views.filter((v) => v.id === id)]);
       push({ title: "Could not delete view", tone: "error" });
     }
   }
@@ -294,7 +313,7 @@ export function BoardClient({
     return (
       <div
         key={t.id}
-        draggable={!listMode}
+        draggable={!listMode && !queryLoading && activeFilterCount === 0 && filters.sort === "manual" && !pagination.hasMore}
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", t.id);
           e.dataTransfer.effectAllowed = "move";
@@ -321,12 +340,12 @@ export function BoardClient({
         )}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === "Enter" && openTask(t.id)}
+        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTask(t.id); } }}
         aria-label={t.title}
       >
         <div className="flex items-start gap-2">
           <span
-            className={cn("mt-0.5 transition-opacity", selected ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
+            className={cn("mt-0.5 transition-opacity", selected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100")}
             onClick={(e) => e.stopPropagation()}
           >
             <input
@@ -402,8 +421,8 @@ export function BoardClient({
               </div>
             ))}
             <div className="mt-2 flex gap-1.5 border-t border-line p-2 pt-2.5">
-              <Input value={viewName} onChange={(e) => setViewName(e.target.value)} placeholder="Save current as…" className="h-8 flex-1 text-[12px]" maxLength={40} />
-              <Button size="sm" variant="outline" onClick={saveView} disabled={!viewName.trim()}>
+              <Input aria-label="Saved view name" value={viewName} onChange={(e) => setViewName(e.target.value)} placeholder="Save current as…" className="h-8 flex-1 text-[12px]" maxLength={40} />
+              <Button aria-label="Save view" size="sm" variant="outline" onClick={saveView} disabled={!viewName.trim()}>
                 <Icon name="save" size={12} />
               </Button>
             </div>
@@ -465,6 +484,8 @@ export function BoardClient({
         )}
       </div>
 
+      {queryLoading && <p role="status">Updating tasks...</p>}
+      {(activeFilterCount > 0 || pagination.hasMore || filters.sort !== "manual") && <p className="mb-3 text-xs text-mist-500">Clear filters, select manual order and load all tasks to drag. Change status from task details at any time.</p>}
       {/* board */}
       {filters.layout === "board" ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -559,7 +580,7 @@ export function BoardClient({
                 </tr>
               </thead>
               <tbody>
-                {sortTasks(filtered, filters.sort === "manual" ? "risk" : filters.sort).map((t) => {
+                {sortTasks(filtered, filters.sort).map((t) => {
                   const project = projectById.get(t.projectId);
                   return (
                     <tr key={t.id} className="cursor-pointer border-b border-line/50 transition-colors hover:bg-ink-800/60" onClick={() => openTask(t.id)}>
@@ -567,7 +588,7 @@ export function BoardClient({
                         <input type="checkbox" className="h-3.5 w-3.5 accent-[#7c5cff]" checked={selection.has(t.id)} onChange={() => toggleSelect(t.id)} aria-label={`Select ${t.title}`} />
                       </td>
                       <td className="max-w-[320px] px-3 py-2.5">
-                        <p className={cn("truncate text-[13px] font-medium text-mist-200", t.status === "done" && "text-mist-500 line-through")}>{t.title}</p>
+                        <button className={cn("truncate text-left text-[13px] font-medium text-mist-200", t.status === "done" && "text-mist-500 line-through")} onClick={(e) => { e.stopPropagation(); openTask(t.id); }}>{t.title}</button>
                         <p className="font-mono text-[9.5px]" style={{ color: project?.color }}>{project?.key} {t.tags.map((x) => `#${x}`).join(" ")}</p>
                       </td>
                       <td className="px-3 py-2.5">
@@ -599,7 +620,7 @@ export function BoardClient({
 
       {pagination.hasMore && (
         <div className="mt-4 flex justify-center">
-          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore || queryLoading}>
             {loadingMore ? <span className="animate-spin">◌</span> : <Icon name="down" size={13} />}
             {loadingMore ? "Loading tasks…" : `Load more · ${tasks.length} of ${pagination.total}`}
           </Button>

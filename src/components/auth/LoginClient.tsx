@@ -16,7 +16,7 @@ const DEMO_USERS = [
 ];
 
 
-export function LoginClient() {
+export function LoginClient({ demoEnabled = false }: { demoEnabled?: boolean }) {
   const router = useRouter();
   const { push } = useToast();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -93,18 +93,18 @@ export function LoginClient() {
           <div className="animate-rise mt-8 grid grid-cols-2 gap-3" style={{ animationDelay: "240ms" }}>
             <div className="card p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Cycle time</p>
-              <p className="mt-2 font-mono text-[13px] text-mist-300">completedAt − flowStart</p>
+              <p className="mt-2 font-mono text-[13px] text-mist-300">Time from starting work to completion</p>
               <p className="mt-2 text-[11.5px] leading-4 text-mist-500">P50 and P85 by nearest rank over the window. Empty windows show “—”, never zero.</p>
             </div>
             <div className="card p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Deadline risk</p>
-              <p className="mt-2 font-mono text-[13px] text-mist-300">S = 100 · Σ wᵢ fᵢ</p>
-              <p className="mt-2 text-[11.5px] leading-4 text-mist-500">Six factors, weights sum to 1. Every score shows its breakdown.</p>
+              <p className="mt-2 font-mono text-[13px] text-mist-300">Understand what puts deadlines at risk</p>
+              <p className="mt-2 text-[11.5px] leading-4 text-mist-500">Four factors, weights sum to 1. Every score shows its breakdown.</p>
             </div>
           </div>
 
           <div className="animate-rise mt-6 flex flex-wrap gap-2" style={{ animationDelay: "320ms" }}>
-            {["λₜ = α·xₜ + (1−α)·λₜ₋₁", "P85 cycle time", "S = 100·Σ wᵢfᵢ", "B / q50"].map((f) => (
+            {["Delivery trends", "Cycle-time percentiles", "Explainable risk", "Clearance forecasts"].map((f) => (
               <code key={f} className="rounded-lg border border-line bg-ink-850 px-2.5 py-1 font-mono text-[11px] text-pulse-300">
                 {f}
               </code>
@@ -149,17 +149,17 @@ export function LoginClient() {
           <form onSubmit={onSubmit} className="space-y-4">
             {mode === "register" && (
               <div>
-                <FieldLabel>Your name</FieldLabel>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" required maxLength={80} />
+                <FieldLabel htmlFor="loginclient-1">Your name</FieldLabel>
+                <Input id="loginclient-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" required maxLength={80} />
               </div>
             )}
             <div>
-              <FieldLabel>Email</FieldLabel>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@team.dev" required autoComplete="email" />
+              <FieldLabel htmlFor="loginclient-2">Email</FieldLabel>
+              <Input id="loginclient-2" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@team.dev" required autoComplete="email" />
             </div>
             <div>
-              <FieldLabel>Password</FieldLabel>
-              <Input
+              <FieldLabel htmlFor="loginclient-3">Password</FieldLabel>
+              <Input id="loginclient-3"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -171,8 +171,8 @@ export function LoginClient() {
             </div>
             {mode === "register" && (
               <div>
-                <FieldLabel>Workspace name <span className="normal-case text-mist-600">(optional)</span></FieldLabel>
-                <Input value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} placeholder="Nova Product Lab" maxLength={80} />
+                <FieldLabel htmlFor="loginclient-4">Workspace name <span className="normal-case text-mist-600">(optional)</span></FieldLabel>
+                <Input id="loginclient-4" value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} placeholder="Nova Product Lab" maxLength={80} />
               </div>
             )}
             {error && (
@@ -187,7 +187,7 @@ export function LoginClient() {
             </Button>
           </form>
 
-          <div className="mt-8">
+          {demoEnabled && <div className="mt-8">
             <div className="mb-3 flex items-center gap-3">
               <span className="h-px flex-1 bg-line" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist-600">Explore the demo</span>
@@ -211,7 +211,7 @@ export function LoginClient() {
               ))}
             </div>
             <p className="mt-3 text-center font-mono text-[11px] text-mist-600">demo password: demo1234</p>
-          </div>
+          </div>}
         </div>
       </section>
     </main>

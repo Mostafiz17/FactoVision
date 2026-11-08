@@ -27,7 +27,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <p style={{ fontSize: 40, margin: 0 }}>⚠</p>
           <h1 style={{ fontSize: 20, margin: "12px 0 8px" }}>{BRAND.name} hit a critical error</h1>
           <p style={{ fontSize: 14, lineHeight: 1.5, color: "#93a1bc", margin: 0 }}>
-            {error.message || "The application shell failed to render."} Your data is untouched.
+            The application could not be displayed. Reload and check the latest state before repeating an action.
           </p>
           {error.digest && (
             <p style={{ fontFamily: "monospace", fontSize: 11, color: "#4d5a78", marginTop: 12 }}>ref: {error.digest}</p>

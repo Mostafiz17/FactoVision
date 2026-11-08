@@ -1,5 +1,31 @@
 # FactoVision by Factoryze
 
+## Remediation operations (8 November 2026)
+
+Run the revised additive `npm run db:setup` before deploying this version: it adds
+`invitations` and `auth_limits` collections/indexes. Runtime never initializes them.
+No setup, migration, seed, or import was run against the configured database during remediation.
+Review setup privileges and take the normal backup before applying any production metadata changes.
+
+New invitations never disclose an account password. Existing accounts join normally;
+new recipients register with the invited email and their own password within seven days.
+Email delivery and proof of email ownership are not implemented; use a trusted invitation
+communication process and add verified-email delivery before deployment where email ownership
+is a security requirement. Settings now supports password rotation and invalidates other sessions.
+Existing users created under the old shared-password invitation flow must rotate their password;
+these records cannot be identified reliably from the old schema and were not rewritten automatically.
+
+Demo UI/authentication requires `ENABLE_DEMO=true` outside production. Production always rejects
+the reserved demo identities, including previously issued sessions. `TRUST_PROXY` defaults off;
+enable it only when the hosting proxy overwrites forwarded headers. Authentication and AI counters
+are shared in MongoDB and expire through TTL indexes; time-window enforcement does not rely on TTL timing.
+
+After `npm run build`, `npm run test:e2e` starts a disposable local replica set and production server,
+seeds synthetic non-demo identities, runs the browser suite, then stops both. It never uses the
+configured database. The runner currently expects the cached Windows MongoDB test binary at
+`tmp/mongodb-binaries/mongod.exe` and installed Playwright browsers. Vitest provisions its own replica set.
+Artifacts stay in ignored `tmp/regression-*` directories. See `AUDIT.md` for the current checklist/results.
+
 **See Progress. Build Better.**
 
 Team task management, collaboration, explainable deadline-risk scoring, mathematically

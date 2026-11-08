@@ -6,7 +6,7 @@ import { expect, request, test, type APIRequestContext, type Page } from "@playw
  * equality rather than hardcoded numbers (fixture-exact values live in Vitest).
  */
 test.describe.configure({ mode: "serial" });
-const BASE = "http://localhost:3000";
+const BASE = (process.env.E2E_BASE_URL ?? "http://localhost:3000");
 
 interface Dash {
   summary: Record<string, number | null>;
@@ -32,8 +32,8 @@ let ws: string;
 let uiEmail: string;
 
 test.beforeAll(async () => {
-  ava = await session("ava@cadence.dev");
-  mira = await session("mira@cadence.dev");
+  ava = await session("ava@e2e.test");
+  mira = await session("mira@e2e.test");
   ws = (await (await ava.get("/api/auth/me")).json()).workspaces[0].id;
   // UI tests use a dedicated admin invited into the seeded workspace. The AI
   // insights limiter is per user; sharing `ava` across suites made the truthful
@@ -117,12 +117,6 @@ test.describe("API: configurable, versioned risk model", () => {
   });
 });
 
-async function login(page: Page, name: RegExp) {
-  await page.goto("/login");
-  await page.getByRole("button", { name }).click();
-  await page.waitForURL("**/app");
-}
-
 async function loginFresh(page: Page): Promise<void> {
   await page.goto("/login");
   await page.fill('input[type="email"]', uiEmail);
@@ -190,7 +184,11 @@ test.describe("UI: dashboard renders the API data", () => {
   });
 
   test("risk settings are read-only for a project manager", async ({ page }) => {
-    await login(page, /Mira Solis/);
+    await page.goto("/login");
+    await page.getByLabel("Email", { exact: true }).fill("mira@e2e.test");
+    await page.getByLabel("Password", { exact: true }).fill("demo1234");
+    await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
+    await page.waitForURL("**/app");
     await page.goto("/app/settings");
     const card = page.getByTestId("risk-config");
     await expect(card).toContainText("Only admins and owners can edit");

@@ -29,10 +29,10 @@ describe("structured output validation", () => {
     expect(r.droppedInvalid).toBe(2);
   });
 
-  it("keeps only the known subset of mixed citations", () => {
+  it("rejects mixed known and unknown citations", () => {
     const r = validateInsights([item({ evidenceRefs: ["E99", known] })], bundle);
-    expect(r.insights[0].evidenceRefs).toEqual([known]);
-    expect(r.droppedInvalid).toBe(0);
+    expect(r.insights).toEqual([]);
+    expect(r.droppedInvalid).toBe(1);
   });
 
   it("strips task ids the bundle never supplied", () => {

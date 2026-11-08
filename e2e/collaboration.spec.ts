@@ -9,7 +9,7 @@ interface Page<T> { nextCursor: string | null; threads: T[]; items: T[] }
  */
 test.describe.configure({ mode: "serial" });
 
-const BASE = "http://localhost:3000";
+const BASE = (process.env.E2E_BASE_URL ?? "http://localhost:3000");
 const run = Date.now();
 
 interface Actor { ctx: APIRequestContext; id: string; workspaceId: string; }
@@ -96,7 +96,7 @@ test("deadline alerts: overdue and due-soon are generated on poll and deduplicat
   const overdueId = (await od.json()).task.id;
   const soonId = (await sn.json()).task.id;
 
-  for (let i = 0; i < 3; i++) await notifs(bob, ws); // repeated polls = repeated sweeps
+  for (let i = 0; i < 3; i++) expect((await bob.ctx.post("/api/notifications", { data: { workspaceId: ws } })).status()).toBe(200); // explicit, idempotent generation
   const b = await notifs(bob, ws);
   expect(b.items.filter((n) => n.kind === "overdue" && n.taskId === overdueId)).toHaveLength(1);
   expect(b.items.filter((n) => n.kind === "deadline_soon" && n.taskId === soonId)).toHaveLength(1);

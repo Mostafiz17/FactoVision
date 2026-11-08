@@ -143,7 +143,7 @@ not deleted at asOf, created at or before asOf.
 - `blockedEstimatedPoints` = Σ estimate of blocked tasks (unestimated contribute 0).
 - **topBlockers** = up to 5 unresolved blockers ranked by the number of **open population** tasks they hold back
   (ties: title ascending). A blocker outside the population still counts when the blocked task is inside it.
-- **Limitations:** dependency edges are current-state, so an edge added after asOf still applies on replay. Time spent
+- **Limitations:** current dependency edges are included only if created by asOf; removed edges cannot be reconstructed. Time spent
   blocked is not measured, because dependency events record the blocker's title rather than its id.
 
 ## 6. Eligibility at a glance
@@ -210,7 +210,7 @@ below are historical evidence from the earlier persistence adapter; the current 
 ## 11. Limitations (summary)
 
 1. Attributes other than status and deletion are current values: project, assignee, priority, labels, due dates, estimates.
-2. Dependency edges are current-state (affects as-of replay of the blocked analysis).
+2. Removed dependency edges cannot be reconstructed. Current edges created after asOf are excluded.
 3. Blocked time is not measured; dependency events do not carry the blocker id.
 4. Flow start does not reset on a move back to `todo` (the cycle runs from the first start).
 5. Gross flow: reopen-and-recomplete counts twice in throughput and timing.

@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as PopoverRx from "@radix-ui/react-popover";
 import * as TooltipRx from "@radix-ui/react-tooltip";
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, type ReactNode, type HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import { Icon } from "./icons";
 
@@ -150,7 +150,7 @@ export const TooltipProvider = TooltipRx.Provider;
 export function Tip({ label, children, side = "top" }: { label: string; children: ReactNode; side?: "top" | "bottom" | "left" | "right" }) {
   return (
     <TooltipRx.Root>
-      <TooltipRx.Trigger asChild>{children}</TooltipRx.Trigger>
+      <TooltipRx.Trigger asChild>{isValidElement<HTMLAttributes<HTMLElement>>(children) && typeof children.type === "string" && !["button", "a", "input"].includes(children.type) ? cloneElement(children, { tabIndex: 0 }) : children}</TooltipRx.Trigger>
       <TooltipRx.Portal>
         <TooltipRx.Content
           side={side}

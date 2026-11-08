@@ -1,7 +1,7 @@
 "use client";
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { ChartTip } from "./shared";
+import { ChartData, ChartTip } from "./shared";
 
 export function OnTimeDonut({ onTime, late, height = 180 }: { onTime: number; late: number; height?: number }) {
   const total = onTime + late;
@@ -18,7 +18,7 @@ export function OnTimeDonut({ onTime, late, height = 180 }: { onTime: number; la
   ];
   const rate = Math.round((onTime / total) * 100);
   return (
-    <div className="relative" style={{ height }}>
+    <><ChartData columns={["On time", "Late"]} rows={[[onTime, late]]} /><div className="relative" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Tooltip content={<ChartTip />} />
@@ -34,6 +34,6 @@ export function OnTimeDonut({ onTime, late, height = 180 }: { onTime: number; la
         </span>
         <span className="text-[10px] font-semibold uppercase tracking-widest text-mist-600">on time</span>
       </div>
-    </div>
+    </div></>
   );
 }

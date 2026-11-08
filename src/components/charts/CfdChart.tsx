@@ -4,7 +4,7 @@ import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
 import type { CfdPoint } from "@/lib/domain/types";
 import { STATUS_HEX } from "@/lib/utils";
-import { LegendToggle } from "./shared";
+import { ChartData, LegendToggle } from "./shared";
 
 type Band = "backlog" | "todo" | "in_progress" | "review" | "done";
 const BANDS: { key: Band; label: string }[] = [
@@ -76,12 +76,12 @@ export function CfdChart({ data, height = 260 }: { data: CfdPoint[]; height?: nu
       .attr("transform", `translate(0,${h})`)
       .call(xAxis)
       .call((sel) => sel.select(".domain").attr("stroke", "#1c2947"))
-      .call((sel) => sel.selectAll("text").attr("fill", "#6d7a99").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
+      .call((sel) => sel.selectAll("text").attr("fill", "#8c9ab8").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
       .call((sel) => sel.selectAll("line").attr("stroke", "#1c2947"));
     g.append("g")
       .call(yAxis)
       .call((sel) => sel.select(".domain").remove())
-      .call((sel) => sel.selectAll("text").attr("fill", "#6d7a99").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
+      .call((sel) => sel.selectAll("text").attr("fill", "#8c9ab8").style("font-family", "JetBrains Mono, monospace").style("font-size", "9.5px"))
       .call((sel) => sel.selectAll("line").attr("stroke", "#1c2947").attr("stroke-dasharray", "2 5"));
 
     const cursor = g.append("line").attr("y1", 0).attr("y2", h).attr("stroke", "#8f76ff").attr("stroke-width", 1).attr("stroke-dasharray", "3 3").style("opacity", 0);
@@ -103,7 +103,7 @@ export function CfdChart({ data, height = 260 }: { data: CfdPoint[]; height?: nu
           tip.style.left = `${Math.min(width - 150, margin.left + px + 10)}px`;
           tip.style.top = `${margin.top + 6}px`;
           tip.innerHTML =
-            `<p style="font-family:JetBrains Mono,monospace;font-size:10px;color:#6d7a99;margin-bottom:3px">${d.date}</p>` +
+            `<p style="font-family:JetBrains Mono,monospace;font-size:10px;color:#8c9ab8;margin-bottom:3px">${d.date}</p>` +
             keys
               .map(
                 (k) =>
@@ -134,6 +134,7 @@ export function CfdChart({ data, height = 260 }: { data: CfdPoint[]; height?: nu
           }
         />
       </div>
+      <ChartData columns={["Day", ...BANDS.map((b) => b.label)]} rows={data.map((d) => [d.date, ...BANDS.map((b) => d[b.key])])} />
       <svg ref={svgRef} className="w-full" style={{ height }} role="img" aria-label="Cumulative flow diagram" />
       <div
         ref={tipRef}

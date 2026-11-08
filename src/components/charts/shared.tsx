@@ -25,7 +25,7 @@ export function ChartCard({
   delay?: number;
 }) {
   return (
-    <section className={cn("card animate-rise p-4 sm:p-5", className)} style={{ animationDelay: `${delay}ms` }}>
+    <section className={cn("card animate-rise min-w-0 p-4 sm:p-5", className)} style={{ animationDelay: `${delay}ms` }}>
       <div className="mb-4 flex flex-wrap items-start gap-2">
         <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-pulse-600/15 text-pulse-300">
           <Icon name={icon} size={14} />
@@ -111,4 +111,8 @@ export function LegendToggle({
       })}
     </div>
   );
+}
+/** Text alternative uses the exact source rows supplied to the chart. */
+export function ChartData({ columns, rows }: { columns: string[]; rows: (string | number)[][] }) {
+  return <details className="mt-3 min-w-0 text-xs text-mist-400"><summary className="cursor-pointer">View chart data</summary><div className="max-h-64 overflow-auto"><table className="w-full text-left"><caption className="sr-only">Chart source data</caption><thead><tr>{columns.map((c) => <th key={c} scope="col" className="p-2">{c}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="p-2">{c}</td>)}</tr>)}</tbody></table></div></details>;
 }

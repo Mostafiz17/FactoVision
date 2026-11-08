@@ -26,9 +26,12 @@ export const INDEXES: Record<keyof Collections, IndexDescription[]> = {
   ],
   saved_views: [{ key: { workspaceId: 1, userId: 1, createdAt: 1 } }],
   risk_configs: [{ key: { workspaceId: 1 }, unique: true, name: "risk_workspace_unique" }],
+  invitations: [{ key: { workspaceId: 1, email: 1 }, unique: true }, { key: { email: 1, expiresAt: 1 } }, { key: { expiresAt: 1 }, expireAfterSeconds: 0 }],
+  auth_limits: [{ key: { expiresAt: 1 }, expireAfterSeconds: 0 }],
 };
 const UUID = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
 const required: Record<keyof Collections, string[]> = {
+  invitations: ["workspaceId", "email", "role", "invitedBy", "expiresAt"], auth_limits: ["count", "expiresAt"],
   users: ["email", "name", "passwordHash"], sessions: ["userId", "expiresAt"], workspaces: ["name", "slug"],
   memberships: ["workspaceId", "userId", "role"], projects: ["workspaceId", "name", "key"],
   tasks: ["workspaceId", "projectId", "title", "status", "priority", "version"],
@@ -38,7 +41,7 @@ const required: Record<keyof Collections, string[]> = {
 };
 function collectionValidator(name: keyof Collections) {
   const properties: Record<string, unknown> = {
-    _id: { bsonType: "string", pattern: name === "sessions" ? "^[0-9a-f]{64}$" : UUID },
+    _id: { bsonType: "string", pattern: name === "sessions" || name === "auth_limits" ? "^[0-9a-f]{64}$" : UUID },
     id: { bsonType: "string" }, createdAt: { bsonType: "date" },
   };
   for (const field of ["workspaceId", "userId", "projectId", "taskId", "dependsOnId", "assigneeId", "creatorId", "authorId", "actorId", "parentTaskId", "parentCommentId", "createdBy", "updatedBy"]) {
@@ -47,7 +50,9 @@ function collectionValidator(name: keyof Collections) {
   for (const field of ["dueDate", "startedAt", "completedAt", "deletedAt", "readAt"]) properties[field] = { bsonType: ["date", "null"] };
   for (const field of ["updatedAt", "statusSince"]) properties[field] = { bsonType: "date" };
   for (const field of required[name].filter((field) => /Id$/.test(field))) properties[field] = { bsonType: "string", pattern: UUID };
-  if (name === "sessions") properties.expiresAt = { bsonType: "date" };
+  if (name === "sessions" || name === "invitations" || name === "auth_limits") properties.expiresAt = { bsonType: "date" };
+  if (name === "invitations") properties.role = { enum: ["admin", "project_manager", "member"] };
+  if (name === "invitations") properties.invitedBy = { bsonType: "string", pattern: UUID };
   if (name === "memberships") properties.role = { enum: ["owner", "admin", "project_manager", "member"] };
   if (name === "tasks") {
     properties.status = { enum: ["backlog", "todo", "in_progress", "review", "done"] };

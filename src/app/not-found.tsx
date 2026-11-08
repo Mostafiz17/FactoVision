@@ -11,8 +11,7 @@ export default function NotFound() {
         </p>
         <h1 className="panel-title mt-3 text-lg font-bold text-mist-100">This coordinate isn&apos;t on the map</h1>
         <p className="mt-2 text-[13px] leading-5 text-mist-400">
-          The page you asked for doesn&apos;t exist — or it belongs to a workspace you can&apos;t see. Tenant isolation
-          means we won&apos;t tell you which.
+          The page you asked for doesn&apos;t exist — or it belongs to a workspace you can&apos;t see. Check the address or choose another workspace.
         </p>
         <div className="mt-6 flex justify-center gap-2">
           <Link href="/app">

@@ -8,7 +8,7 @@ export interface ToastOptions {
   title: string;
   description?: string;
   tone?: "success" | "error" | "info";
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void | Promise<void> };
   duration?: number;
 }
 
@@ -73,8 +73,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     <button
                       className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-pulse-600/50 bg-pulse-600/15 px-2 py-1 text-xs font-semibold text-pulse-300 hover:bg-pulse-600/30"
                       onClick={() => {
-                        t.action?.onClick();
-                        dismiss(t.id);
+                        Promise.resolve().then(() => t.action?.onClick()).then(() => dismiss(t.id)).catch((e: unknown) => {
+                          push({ title: "Action failed", description: e instanceof Error ? e.message : "Please try again", tone: "error" });
+                        });
                       }}
                     >
                       <Icon name="undo" size={12} />

@@ -177,6 +177,7 @@ export function buildAnalyticsReport(source: AnalyticsSource, options: ReportOpt
   };
   const blockersOf = new Map<string, string[]>();
   for (const edge of source.edges) {
+    if (edge.createdAt && edge.createdAt > cutoff) continue;
     if (!openIds.has(edge.taskId) || !blockerUnresolved(edge.dependsOnId)) continue;
     const list = blockersOf.get(edge.taskId);
     if (list) list.push(edge.dependsOnId);

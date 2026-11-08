@@ -111,7 +111,7 @@ export function ErrorPanel({
         </span>
         <h2 className="panel-title mt-4 text-lg font-bold text-mist-100">Something went sideways</h2>
         <p className="mt-2 text-[13px] leading-5 text-mist-400">
-          {error.message || "An unexpected error interrupted this page."} Your data is safe — nothing was written by a failed render.
+          We could not display this page. Retry or return to your workspace. Check the latest state before repeating an action.
         </p>
         {error.digest && (
           <p className="mt-3 rounded-lg border border-line bg-ink-900 px-3 py-1.5 font-mono text-[10.5px] text-mist-600">

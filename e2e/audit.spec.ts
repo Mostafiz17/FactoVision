@@ -6,7 +6,7 @@ import { expect, request, test, type APIRequestContext } from "@playwright/test"
  */
 test.describe.configure({ mode: "serial" });
 
-const BASE = "http://localhost:3000";
+const BASE = (process.env.E2E_BASE_URL ?? "http://localhost:3000");
 const RUN = Date.now();
 const NIL = "00000000-0000-4000-8000-000000000000";
 const cred = (tag: string) => ({ email: `audit-${tag}-${RUN}@test.dev`, name: `Audit ${tag} ${RUN}`, password: "password123" });

@@ -12,7 +12,7 @@ Environment access goes through src/server/env.ts. No database connection is ope
 ## Persistence
 
 - src/db/schema.ts: typed documents for users, sessions, workspaces, memberships, projects,
-  tasks, task_dependencies, task_events, comments, notifications, saved_views, risk_configs.
+  tasks, task_dependencies, task_events, comments, notifications, saved_views, risk_configs, invitations and auth_limits.
 - src/db/index.ts: pooled client, lazy readiness, AsyncLocalStorage session propagation,
   retryable snapshot transactions with majority writes, and explicit connection cleanup.
 - src/db/repository.ts: native driver queries, updates, aggregation, defaults and DTO ID mapping.
@@ -56,12 +56,12 @@ Every scoped service checks membership and the existing capability matrix in
 src/server/auth/permissions.ts. The ladder remains owner > admin > project_manager > member.
 Role changes are owner-exclusive. Owners cannot leave, be removed or demoted; administrators
 remove only lower ranks. Nonmembers receive 404. CSRF Origin checks, password hashing, session
-cookie security, request validation and failure-only login throttling are unchanged.
+cookie security and request validation remain. Login, registration and AI use atomic shared MongoDB rate windows. Forwarded client addresses require explicit trusted-proxy configuration.
 
-The existing route inventory and JSON DTOs are retained: auth/me; workspaces/members; projects;
+The route inventory retains: auth/me; workspaces/members; projects;
 task CRUD/bulk/dependencies/comments; saved views; activity; notifications; analytics/report;
 dashboard; risk/config; AI insights; health. UUID schemas, task revisions, tags/labels alias,
-soft-delete/restore, pagination cursors and date serialization are preserved.
+soft-delete/restore and pagination cursors are preserved. Forecast durations are nullable (null means no finite forecast). Invitations return pending/member results without passwords. POST auth/password rotates credentials and revokes other sessions. Notification GETs are read-only; POST notifications explicitly generates deadline alerts.
 Task searches escape regular expressions; explicit status/priority sort ranks and null-last due
 dates preserve the old ordering contract.
 
@@ -70,7 +70,7 @@ dates preserve the old ordering contract.
 The analytics repository loads workspace-scoped projections, replayable events up to asOf,
 and dependency edges. Daily counts use a MongoDB $match/$lookup/$dateToString/$group pipeline,
 including tenant scoping, IANA timezone and half-open/asOf boundaries.
-The domain replay/report builder and all formulas remain unchanged. Database integration tests
+The replay/report builder excludes dependencies created after asOf, consistently with dashboard/risk. Database integration tests
 compare aggregation results to pure event-derived counts for six filters and three timezones.
 
 Dashboard and risk consume the same analytics source. Risk configuration retains optimistic
@@ -79,7 +79,7 @@ or provider failures still use the disclosed deterministic fallback.
 
 ## UI and tests
 
-Server components call authorized services; client components retain API-driven optimistic updates.
+Server components call authorized services. Workspace changes remount workspace-owned state; task autosaves are serialized and retain drafts. Board filtering/sorting occurs before server pagination. Project counts use aggregation, task-detail comments paginate top-level threads, and dependency lookup supports search/pagination. Whole-history analytics/risk replay and unbounded replies per thread remain scale limits.
 The prior React fixes remain: initialized overlay state, guarded async callbacks, URL task selection
 and a hydration-safe timezone snapshot. No ESLint rules are disabled.
 

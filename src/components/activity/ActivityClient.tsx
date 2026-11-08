@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ActivityDTO, ActivityPageDTO, MemberDTO, ProjectDTO } from "@/lib/domain/types";
 import { cn, timeAgo } from "@/lib/utils";
@@ -36,17 +36,22 @@ export function ActivityClient({
   const [items, setItems] = useState<ActivityDTO[]>(initial.items);
   const [cursor, setCursor] = useState<string | null>(initial.nextCursor);
   const [projectId, setProjectId] = useState(initialProjectId);
+  const generation = useRef(0);
   const [loading, setLoading] = useState(false);
   const [group, setGroup] = useState("all");
   const [memberId, setMemberId] = useState("");
+  const [previousInitial, setPreviousInitial] = useState(initial);
+  if (previousInitial !== initial) { setPreviousInitial(initial); setItems(initial.items); setCursor(initial.nextCursor); }
 
   async function fetchPage(nextProject: string, after: string | null) {
+    const request = ++generation.current;
     setLoading(true);
     try {
       const qs = new URLSearchParams({ workspaceId, limit: "50" });
       if (nextProject) qs.set("projectId", nextProject);
       if (after) qs.set("cursor", after);
       const page = await api<ActivityPageDTO>(`/api/activity?${qs.toString()}`);
+      if (request !== generation.current) return;
       setItems((prev) => {
         if (!after) return page.items;
         const known = new Set(prev.map((a) => a.id));
@@ -54,9 +59,10 @@ export function ActivityClient({
       });
       setCursor(page.nextCursor);
     } catch (e) {
+      if (request !== generation.current) return;
       push({ title: "Could not load activity", description: e instanceof Error ? e.message : undefined, tone: "error" });
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   }
 

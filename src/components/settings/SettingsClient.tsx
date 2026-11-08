@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { MemberDTO, Role, WorkspaceDTO } from "@/lib/domain/types";
+import { ROLE_RANK } from "@/server/auth/permissions";
 import { ROLE_LABEL } from "@/lib/domain/types";
 import { can, type Capability } from "@/server/auth/permissions";
 import { Avatar, Button, FieldLabel, Input, Select, Spinner } from "@/components/ui";
@@ -11,6 +12,7 @@ import { Icon } from "@/components/icons";
 import { Modal } from "@/components/overlays";
 import { useToast } from "@/components/toast";
 import { RiskConfigCard } from "./RiskConfigCard";
+import { AccountSecurity } from "./AccountSecurity";
 
 const ROLE_BADGE: Record<Role, string> = {
   owner: "border-pulse-500/50 bg-pulse-600/15 text-pulse-300",
@@ -36,10 +38,8 @@ export function SettingsClient({
   const [name, setName] = useState(workspace.name);
   const [savingName, setSavingName] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "project_manager" | "member">("member");
   const [inviting, setInviting] = useState(false);
-  const [tempCredential, setTempCredential] = useState<{ email: string; password: string } | null>(null);
   const [removing, setRemoving] = useState<MemberDTO | null>(null);
 
   async function saveName() {
@@ -60,15 +60,13 @@ export function SettingsClient({
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      const res = await api<{ member: MemberDTO; tempPassword: string | null }>(
+      const res = await api<{ member: MemberDTO | null; pending: boolean; email: string }>(
         `/api/workspaces/${workspace.id}/members`,
         "POST",
-        { email: inviteEmail.trim(), name: inviteName.trim() || undefined, role: inviteRole },
+        { email: inviteEmail.trim(), role: inviteRole },
       );
-      if (res.tempPassword) setTempCredential({ email: res.member.email, password: res.tempPassword });
-      push({ title: "Member added", description: `${res.member.name} joined as ${res.member.role}.`, tone: "success" });
+      push({ title: res.pending ? "Invitation saved" : "Member added", description: res.pending ? "Ask your teammate to create an account with this email within seven days. They choose their own password." : `${res.member?.name} joined as ${res.member?.role}.`, tone: "success" });
       setInviteEmail("");
-      setInviteName("");
       router.refresh();
     } catch (e) {
       push({ title: "Invite failed", description: e instanceof Error ? e.message : undefined, tone: "error" });
@@ -103,45 +101,39 @@ export function SettingsClient({
     <div className="mx-auto max-w-[860px] space-y-5">
       <div>
         <h1 className="panel-title text-xl font-bold text-mist-100">Workspace settings</h1>
-        <p className="text-[12px] text-mist-500">You are <b className="uppercase text-pulse-300">{ROLE_LABEL[workspace.role]}</b> here. Roles are enforced on the server, not just in this UI.</p>
+        <p className="text-[12px] text-mist-500">You are <b className="uppercase text-pulse-300">{ROLE_LABEL[workspace.role]}</b> here.</p>
       </div>
 
       <section className="card p-5">
         <h2 className="panel-title mb-3 text-[14px] font-semibold">General</h2>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[220px] flex-1">
-            <FieldLabel>Workspace name</FieldLabel>
-            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!allowed("workspace.rename")} maxLength={80} />
+            <FieldLabel htmlFor="settingsclient-1">Workspace name</FieldLabel>
+            <Input id="settingsclient-1" value={name} onChange={(e) => setName(e.target.value)} disabled={!allowed("workspace.rename")} maxLength={80} />
           </div>
           <Button onClick={saveName} disabled={!allowed("workspace.rename") || savingName || !name.trim() || name === workspace.name}>
             {savingName && <Spinner size={14} />} Save
           </Button>
         </div>
-        <p className="mt-3 font-mono text-[10.5px] text-mist-600">
-          id: {workspace.id} · every query in this workspace is scoped by membership — other tenants get 404s, not data.
-        </p>
       </section>
 
       <RiskConfigCard workspaceId={workspace.id} canEdit={allowed("risk.configure")} />
+      <AccountSecurity />
 
       {isAdmin && (
         <section className="card p-5">
           <h2 className="panel-title mb-1 text-[14px] font-semibold">Invite a teammate</h2>
           <p className="mb-4 text-[12px] text-mist-500">
-            Existing accounts join instantly. New accounts are provisioned with a one-time password shown to you (no email service is configured in this environment).
+            Existing accounts join instantly. New teammates create their own account with the invited email within seven days. Share these instructions directly; email delivery is not configured.
           </p>
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_130px_auto]">
+          <div className="grid gap-3 sm:grid-cols-[1fr_220px_auto]">
             <div>
-              <FieldLabel>Email</FieldLabel>
-              <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teammate@company.dev" />
+              <FieldLabel htmlFor="settingsclient-2">Email</FieldLabel>
+              <Input id="settingsclient-2" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teammate@company.dev" />
             </div>
             <div>
-              <FieldLabel>Name (new accounts)</FieldLabel>
-              <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Optional" maxLength={80} />
-            </div>
-            <div>
-              <FieldLabel>Role</FieldLabel>
-              <Select
+              <FieldLabel htmlFor="settingsclient-4">Role</FieldLabel>
+              <Select id="settingsclient-4"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as "admin" | "project_manager" | "member")}
               >
@@ -204,7 +196,7 @@ export function SettingsClient({
                   )}
                 </td>
                 <td className="px-5 py-3 text-right">
-                  {m.role !== "owner" && (allowed("workspace.member.remove") || m.id === currentUserId) && (
+                  {m.role !== "owner" && (m.id === currentUserId || (allowed("workspace.member.remove") && ROLE_RANK[m.role] < ROLE_RANK[workspace.role])) && (
                     <button onClick={() => setRemoving(m)} className="rounded-lg p-1.5 text-mist-500 hover:bg-rose-500/15 hover:text-rose-300" aria-label={`Remove ${m.name}`}>
                       <Icon name="trash" size={14} />
                     </button>
@@ -216,30 +208,7 @@ export function SettingsClient({
         </table>
       </section>
 
-      <section className="card p-5">
-        <h2 className="panel-title mb-2 flex items-center gap-2 text-[14px] font-semibold"><Icon name="shield" size={15} className="text-lime-300" /> Security posture</h2>
-        <ul className="grid gap-1.5 text-[12.5px] leading-5 text-mist-400 sm:grid-cols-2">
-          <li>· scrypt password hashing, per-user salts</li>
-          <li>· Hashed opaque session tokens, HttpOnly cookies</li>
-          <li>· SameSite=Lax + Origin checks on mutations</li>
-          <li>· Workspace membership checked on every API call</li>
-          <li>· Zod validation at every trust boundary</li>
-          <li>· Login throttling per IP</li>
-        </ul>
-      </section>
 
-      <Modal open={tempCredential !== null} onClose={() => setTempCredential(null)} title="Share this one-time credential" subtitle="Shown once. In production this would be an emailed invite link.">
-        <div className="rounded-xl border border-lime-400/30 bg-lime-400/8 p-4 font-mono text-[13px]">
-          <p className="text-mist-400">email: <b className="text-mist-100">{tempCredential?.email}</b></p>
-          <p className="mt-1 text-mist-400">password: <b className="text-lime-300">{tempCredential?.password}</b></p>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => tempCredential && navigator.clipboard.writeText(`${tempCredential.email} / ${tempCredential.password}`)}>
-            <Icon name="save" size={13} /> Copy
-          </Button>
-          <Button onClick={() => setTempCredential(null)}>Done</Button>
-        </div>
-      </Modal>
 
       <Modal open={removing !== null} onClose={() => setRemoving(null)} title={`Remove ${removing?.name}?`} subtitle="They lose access to this workspace immediately. Their tasks and history remain.">
         <div className="flex justify-end gap-2">

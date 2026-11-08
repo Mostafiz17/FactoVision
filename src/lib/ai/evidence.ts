@@ -20,7 +20,7 @@ export function buildEvidence(dashboard: DashboardDTO, workspaceName: string, ge
   };
   const add = (text: string, taskIds: string[] = []): string => {
     const id = `E${String(facts.length + 1).padStart(2, "0")}`;
-    facts.push({ id, text, taskIds });
+    facts.push({ id, text: text.length > 4000 ? text.slice(0, 3950) + " [details truncated]" : text, taskIds: taskIds.slice(0, 12) });
     return id;
   };
 
@@ -57,7 +57,7 @@ export function buildEvidence(dashboard: DashboardDTO, workspaceName: string, ge
         ? ": " +
           dashboard.blocked.tasks
             .slice(0, 4)
-            .map((t) => `“${t.title}” blocked ${t.blockedDays === null ? "for an unknown duration" : `${fmtDays(t.blockedDays)} days`} by ${t.blockers.map((b) => `“${b.title}”`).join(", ")}`)
+            .map((t) => `“${t.title}” blocked ${t.blockedDays === null ? "for an unknown duration" : `${fmtDays(t.blockedDays)} days`} by ${t.blockers.slice(0, 8).map((b) => `“${b.title}”`).join(", ")}`)
             .join("; ")
         : ""
     }.`,
@@ -67,18 +67,18 @@ export function buildEvidence(dashboard: DashboardDTO, workspaceName: string, ge
       return [t.taskId, ...t.blockers.map((b) => b.taskId)];
     }),
   );
-  for (const w of dashboard.workload) {
+  for (const w of dashboard.workload.slice(0, 20)) {
     add(
       `Workload of ${w.name}: ${w.activePoints} active pt across ${w.activeTasks} task(s), ${w.queuedPoints} queued pt across ${w.queuedTasks} task(s), ${w.unestimated} unestimated${w.overCapacity ? " — OVER the configured capacity" : ""}.`,
     );
   }
-  for (const p of dashboard.projectProgress) {
+  for (const p of dashboard.projectProgress.slice(0, 20)) {
     add(
       `Project “${p.name}”: ${p.done}/${p.total} done (${p.completionShare === null ? "no tasks" : pct(p.completionShare)}), ${p.open} open, ${p.overdue} overdue, ${p.blocked} blocked.`,
     );
   }
   add(
-    `Deadline risk (model v${dashboard.risk.modelVersion}, config rev ${dashboard.risk.revision}): ${dashboard.risk.distribution.high} high, ${dashboard.risk.distribution.medium} medium, ${dashboard.risk.distribution.low} low; ${dashboard.risk.lowConfidence} score(s) low-confidence.`,
+    `Deadline risk: ${dashboard.risk.distribution.high} high, ${dashboard.risk.distribution.medium} medium, ${dashboard.risk.distribution.low} low; ${dashboard.risk.lowConfidence} score(s) low-confidence.`,
   );
   const topRisk = dashboard.risk.items.slice(0, 5);
   if (topRisk.length) {

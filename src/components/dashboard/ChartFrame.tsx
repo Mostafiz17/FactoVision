@@ -41,7 +41,7 @@ export function ChartFrame({
   const id = useId();
   const [showTable, setShowTable] = useState(false);
   return (
-    <figure className={cn("card m-0 p-4 sm:p-5", className)} aria-labelledby={`${id}-t`} aria-describedby={`${id}-s`} data-testid={testId}>
+    <figure className={cn("card m-0 min-w-0 p-4 sm:p-5", className)} aria-labelledby={`${id}-t`} aria-describedby={`${id}-s`} data-testid={testId}>
       <div className="mb-3 flex items-start gap-2">
         <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-pulse-600/15 text-pulse-300" aria-hidden="true">
           <Icon name={icon} size={14} />

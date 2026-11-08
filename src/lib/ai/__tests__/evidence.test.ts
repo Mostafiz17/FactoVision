@@ -26,7 +26,8 @@ describe("evidence bundle", () => {
     expect(all).toContain("Workload of Ben: 8 active pt");
     expect(all).toContain("Project “Alpha app”: 2/6 done");
     expect(all).toContain("1 high, 4 medium, 2 low");
-    expect(all).toContain("model v2.0.0, config rev 0");
+    expect(all).toContain("Deadline risk:");
+    expect(all).not.toMatch(/model v|config rev/);
   });
 
   it("carries task references only for tasks the dashboard exposes, capped", () => {

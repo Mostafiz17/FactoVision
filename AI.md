@@ -19,11 +19,16 @@ means implementing that call — nothing else in the stack changes. The model re
 aggregates and a capped list of task titles/ids from the caller's workspace. It has no database access, no tools,
 and no ability to query anything.
 
+## Scope and transmission
+The panel uses the selected dashboard window, timezone and filters. Responses include
+providerAttempted separately from mode: a local fallback can follow an external transmission.
+The UI discloses this. No key means no provider call.
+
 ## Evidence contract
 - Facts are derived from the authorized dashboard: window, throughput, completion rate, on-time, cycle/lead,
   workload per assignee, overdue tasks (top 4), blocked tasks with blockers (top 4), project progress, risk
   distribution and the top-5 risk items with scores, intervals and missing inputs, plus data-quality counts.
-- Task references are capped at 12 and limited to tasks the dashboard already exposes.
+- The closed task-reference list is capped at 12. Facts include up to 20 workload rows, 20 project rows, four overdue/blocked summaries and five risk items; blocker titles are capped at eight per summary. Each fact is capped at 4000 characters with truncation disclosed. The reference-list cap does not cap all task titles in fact text.
 - Recommendations must cite evidence ids; citations are validated (`validateInsights`): items citing unknown or no
   evidence are dropped and counted in `droppedInvalid` (surfaced in the UI). Unknown task ids are stripped.
 - Every insight declares `kind`: `fact` (observed) or `suggestion` (proposed action). The UI groups them under
@@ -35,12 +40,12 @@ and no ability to query anything.
 | `OPENAI_API_KEY` | no | unset → deterministic mode | Secret; never sent to the browser, never in responses or logs |
 | `AI_MODEL` | no | `gpt-4o-mini` | Any OpenAI-compatible chat model id |
 | `AI_TIMEOUT_MS` | no | `15000` | 1000–120000; abort → deterministic fallback |
+The timeout covers headers and response-body parsing; output is capped at 1200 completion tokens.
 Endpoint is `https://api.openai.com/v1/chat/completions` (injectable in tests). All variables are validated by
 `src/server/env.ts`; none is `NEXT_PUBLIC_*`.
 
 ## Rate limiting and failure handling
-- Per-user fixed window: **10 requests / 10 minutes** (in-process, like the login throttle; a shared store is the
-  horizontal-scale upgrade). Exceeding it returns **429** with a retry hint; the deterministic panel remains
+- Per-user fixed window: **10 requests / 10 minutes**, using atomic MongoDB counters shared across instances. Exceeding it returns **429** with a retry hint; the deterministic panel remains
   available on the next window.
 - Classified provider failures → deterministic fallback with an honest provider note:
   `timeout` (abort), `rate_limited` (HTTP 429), `auth` (401/403), `server` (5xx/network), `bad_output`
@@ -62,7 +67,7 @@ providers); the fallback is free.
   workspace identifiers and no credentials.
 - The API key exists only in server environment memory: it is sent solely in the `Authorization` header to the
   provider endpoint (asserted in tests), never logged, never returned, never bundled for the client.
-- Data shared with the provider: workspace-scoped aggregates, task titles of at most 12 referenced tasks, member
+- Data shared with the provider: workspace-scoped aggregates, bounded task/project text, a closed list of up to 12 task references, member
   first-name/last-name strings as they appear in workload facts. If your policy forbids sending task titles or member
   names to a third party, do not set `OPENAI_API_KEY` — the deterministic mode shares nothing.
 - Provider-side retention is governed by the provider's terms, not this app.
@@ -75,5 +80,5 @@ providers); the fallback is free.
    verified live.
 3. Suggestions are generic playbook actions derived from the same rules the deterministic engine uses; the AI adds
    phrasing and synthesis, not new analysis.
-4. Rate limiter state is per process (resets on restart; not shared across instances).
+4. Rate-limit counters require the auth_limits collection and its TTL index (explicit db:setup).
 5. Evidence is a point-in-time snapshot at request time (as-of now); it is not streamed or refreshed mid-generation.

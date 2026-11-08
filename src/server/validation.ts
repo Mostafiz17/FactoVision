@@ -45,7 +45,7 @@ export const projectPatchSchema = z.object({
   archived: z.boolean().optional(),
 });
 
-const isoDate = z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/));
+const isoDate = z.string().datetime({ offset: true }).or(z.iso.date());
 
 const labelArray = z.array(z.string().trim().min(1).max(32)).max(8);
 const revision = z.number().int().min(0).max(2_147_483_646);
@@ -111,7 +111,7 @@ export const taskListQuerySchema = z.object({
   priority: z.enum(PRIORITIES).optional(),
   assigneeId: uuid.or(z.literal("none")).optional(),
   label: z.string().trim().min(1).max(32).optional(),
-  sort: z.enum(["position", "due", "priority", "created", "updated", "title"]).default("position"),
+  sort: z.enum(["position", "due", "priority", "created", "updated", "title", "risk"]).default("position"),
 });
 
 export const dependencySchema = z.object({ dependsOnId: uuid });
@@ -168,7 +168,6 @@ export const notificationsPatchSchema = z.object({
   read: z.boolean().default(true), // false ⇒ mark unread
 });
 
-export const aiInsightsSchema = z.object({ workspaceId: uuid, days: z.number().int().min(7).max(120).default(30) });
 export const analyticsReportQuerySchema = z.object({
   workspaceId: uuid,
   days: z.coerce.number().int().min(1).max(366).default(30),
@@ -185,3 +184,5 @@ export const analyticsReportQuerySchema = z.object({
   priority: z.enum(PRIORITIES).optional(),
   label: z.string().trim().min(1).max(32).optional(),
 });
+
+export const aiInsightsSchema = analyticsReportQuerySchema.omit({ asOf: true }).extend({ days: z.number().int().min(1).max(366).default(30) });

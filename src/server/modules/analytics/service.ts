@@ -19,7 +19,8 @@ import {
 } from "@/lib/domain/analytics";
 import type { AnalyticsDTO, MemberLoad, PersonLite, RiskItem, TaskStatus } from "@/lib/domain/types";
 import { STATUSES } from "@/lib/domain/types";
-import { workspaceRisk } from "@/server/modules/risk/service";
+import { loadRiskConfig } from "@/server/modules/risk/service";
+import { assessWorkspaceRisk } from "@/lib/risk/assess";
 import { ensureCan, requireMembership } from "@/server/auth/guard";
 import { ApiError } from "@/server/http";
 import { loadAnalyticsSource } from "./repository";
@@ -178,7 +179,8 @@ export async function computeAnalytics(
   const membersLite = new Map<string, PersonLite>(
     memberRows.map(({ u }) => [u.id, { id: u.id, name: u.name, avatarHue: u.avatarHue }] as const),
   );
-  const { results: riskResults, config: riskConfig } = await workspaceRisk(workspaceId, now);
+  const riskConfig = await loadRiskConfig(workspaceId);
+  const riskResults = assessWorkspaceRisk(source, now, riskConfig.config, riskConfig.revision);
   const riskQueue: RiskItem[] = open
     .flatMap((t) => {
       const risk = riskResults.get(t.id);

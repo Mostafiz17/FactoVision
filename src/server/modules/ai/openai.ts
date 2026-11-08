@@ -52,18 +52,30 @@ const chatResponseSchema = z.object({
 });
 
 export async function generateWithOpenAI(bundle: EvidenceBundle, opts: OpenAIOptions): Promise<unknown> {
-  const doFetch = opts.fetchImpl ?? fetch;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new AiProviderError("timeout", "Provider response timed out"));
+    }, opts.timeoutMs);
+  });
+  try { return await Promise.race([generateResponse(bundle, opts, controller.signal), deadline]); }
+  finally { clearTimeout(timer); }
+}
+
+async function generateResponse(bundle: EvidenceBundle, opts: OpenAIOptions, signal: AbortSignal): Promise<unknown> {
+  const doFetch = opts.fetchImpl ?? fetch;
   let res: Response;
   try {
     res = await doFetch(opts.endpoint ?? "https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${opts.apiKey}` },
-      signal: controller.signal,
+      signal,
       body: JSON.stringify({
         model: opts.model,
         temperature: 0.2,
+        max_completion_tokens: 1200,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -76,8 +88,6 @@ export async function generateWithOpenAI(bundle: EvidenceBundle, opts: OpenAIOpt
       throw new AiProviderError("timeout", `Provider timed out after ${opts.timeoutMs}ms`);
     }
     throw new AiProviderError("server", e instanceof Error ? e.message : "Network failure");
-  } finally {
-    clearTimeout(timer);
   }
 
   if (res.status === 429) throw new AiProviderError("rate_limited", "Provider rate limit or quota exhausted (HTTP 429)");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
 import { ewmaSeries } from "@/lib/domain/analytics";
@@ -60,29 +60,36 @@ function Definition({ title, formula, children }: { title: string; formula: stri
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-[12.5px] font-semibold text-mist-300 hover:text-mist-100">
         <span className="rounded bg-pulse-600/15 px-1.5 py-px font-mono text-[10px] text-pulse-300">ƒ</span>
         {title}
-        <code className="ml-auto hidden font-mono text-[10.5px] font-normal text-mist-500 sm:block">{formula}</code>
         <Icon name="chevDown" size={13} className="text-mist-600 transition-transform group-open:rotate-180" />
       </summary>
-      <div className="border-t border-line px-3.5 py-3 text-[12px] leading-5 text-mist-400">{children}</div>
+      <div className="border-t border-line px-3.5 py-3 text-[12px] leading-5 text-mist-400"><code className="mb-2 block break-words font-mono text-[10.5px] text-mist-500">{formula}</code>{children}</div>
     </details>
   );
 }
 
 export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDTO; workspaceId: string }) {
   const [a, setA] = useState(initial);
+  const [previousInitial, setPreviousInitial] = useState(initial);
+  if (previousInitial !== initial) { setPreviousInitial(initial); setA(initial); }
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef(0);
   const [alpha, setAlpha] = useState(initial.alpha);
   const [bins, setBins] = useState(12);
   const [wipLimit, setWipLimit] = useState(initial.wip.limitPerMember);
   const [pace, setPace] = useState<"p50" | "p85">("p50");
 
   async function changeWindow(days: number) {
+    const generation = ++request.current;
     setLoading(true);
+    setError(null);
     try {
       const res = await api<{ analytics: AnalyticsDTO }>(`/api/analytics?workspaceId=${workspaceId}&days=${days}`);
-      setA(res.analytics);
+      if (generation === request.current) setA(res.analytics);
+    } catch (e) {
+      if (generation === request.current) setError(e instanceof Error ? e.message : "Could not load analytics");
     } finally {
-      setLoading(false);
+      if (generation === request.current) setLoading(false);
     }
   }
 
@@ -127,6 +134,7 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
         <Button variant="outline" size="sm" onClick={exportJson}><Icon name="download" size={13} /> JSON</Button>
       </div>
 
+      {error && <p role="alert" className="text-rose-300">{error} <button onClick={() => void changeWindow(a.days)}>Retry</button></p>}
       {/* stat strip */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
         {[
@@ -145,7 +153,7 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <ChartCard className="lg:col-span-8" title="Throughput" subtitle={`λₜ = α·xₜ + (1−α)·λₜ₋₁ with α = ${alpha.toFixed(2)} — drag the slider to feel the smoothing`} icon="chart"
+        <ChartCard className="lg:col-span-8" title="Throughput" subtitle="Daily completions and their smoothed trend" icon="chart"
           definition="Completed events per UTC day. EWMA reacts to recent days at rate α; small α = smoother, large α = twitchier.">
           <ThroughputChart data={daily} />
         </ChartCard>
@@ -161,27 +169,28 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
             ))}
           </div>
           <p className="font-mono text-4xl font-bold" style={{ color: pace === "p50" ? "#22d3ee" : "#a3e635" }}>
-            {fmtDays(forecastDays)}<span className="text-base text-mist-500"> days</span>
+            {forecastDays === null ? "No forecast" : fmtDays(forecastDays)}{forecastDays !== null && <span className="text-base text-mist-500"> days</span>}
           </p>
-          <div className="mt-3 space-y-1.5 rounded-xl border border-line bg-ink-900/70 p-3 font-mono text-[11.5px] text-mist-400">
-            <p>B = {a.forecast.backlog} open</p>
-            <p>q({pace}) = {forecastRate}/day</p>
-            <p>{a.forecast.backlog} ÷ {forecastRate || 0} = {fmtDays(forecastDays)}</p>
-          </div>
-          {a.forecast.backlog > 0 && !Number.isFinite(forecastDays) && (
+          <details className="mt-3 space-y-1.5 rounded-xl border border-line bg-ink-900/70 p-3 font-mono text-[11.5px] text-mist-400">
+            <summary className="cursor-pointer">How this forecast is calculated</summary>
+            <p>{a.forecast.backlog} open tasks</p>
+            <p>Selected pace: {forecastRate} completed per day</p>
+            <p>{a.forecast.backlog === 0 ? "No backlog to clear." : forecastDays === null ? "More delivery history is needed at this pace." : `Estimated clearance: ${fmtDays(forecastDays)} days`}</p>
+          </details>
+          {a.forecast.backlog > 0 && forecastDays === null && (
             <p className="mt-2 text-[11px] leading-4 text-amber-300">This percentile of daily throughput is zero — the model refuses to invent a date.</p>
           )}
         </ChartCard>
       </div>
 
       <ChartCard title="Cumulative flow diagram" subtitle="End-of-day status occupancy reconstructed from transition events — widening active bands mean WIP is growing" icon="layers" delay={80}
-        definition="Bands sum to live task count per day. A reopen visibly moves work out of Done and back into In progress.">
+        definition="Bands sum to live task count per day. A reopen moves work out of Done and back into To do.">
         <CfdChart data={a.cfd} height={300} />
       </ChartCard>
 
       <div className="grid gap-4 lg:grid-cols-12">
         <ChartCard className="lg:col-span-7" title="Cycle time distribution" subtitle={`${a.cycle.count} completions with a start timestamp in window`} icon="clock" delay={120}
-          definition="Cycle time = completedAt − startedAt, in days, for tasks currently completed within the window."
+          definition="Cycle time = completion time − flow start, in days, for completion events in the window, including rework."
           actions={<Slider label="Bins" value={bins} min={5} max={24} step={1} onChange={setBins} format={(v) => String(v)} />}>
           <CycleHistogram values={cycleValues} p50={a.cycle.p50} p85={a.cycle.p85} bins={bins} />
           <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -234,7 +243,7 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
           </div>
         </ChartCard>
 
-        <ChartCard className="lg:col-span-6" title="Risk model & queue" subtitle={`Risk model v${a.riskModel.version} · config rev ${a.riskModel.revision} · score with uncertainty interval · open any task for its breakdown`} icon="shield" delay={240}
+        <ChartCard className="lg:col-span-6" title="Risk model & queue" subtitle="Open a task to understand its risk factors and uncertainty" icon="shield" delay={240}
           definition="Four weighted factors: schedule pressure (remaining effort vs time available), blocked duration, unresolved dependencies, assignee workload. Missing inputs widen the interval. Weights and bands are configured per workspace in Settings.">
           <div className="mb-3 flex h-3 w-full overflow-hidden rounded-full border border-line">
             {(["low", "medium", "high"] as const).map((b) => (
@@ -247,7 +256,6 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
                 <span className="h-2 w-2 rounded-sm" style={{ background: RISK_HEX[b] }} /> {b}: <b className="font-mono text-mist-200">{a.riskDistribution[b]}</b>
               </span>
             ))}
-            {a.cycleFallbackUsed && <span className="text-amber-300">P85 fallback = 5d (&lt;3 samples)</span>}
           </div>
           <RiskQueue items={a.riskQueue} />
         </ChartCard>
@@ -262,7 +270,7 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
             ({a.totals.completed} − {a.totals.reopened} = {a.totals.net}). Nothing is silently discarded.
           </Definition>
           <Definition title="Cycle & lead time percentiles" formula="nearest-rank: idx = ⌈p/100·n⌉">
-            Cycle = completedAt − startedAt; lead = completedAt − createdAt. Sample: tasks currently completed in window (n={a.cycle.count}).
+            Cycle = completion time − first flow start since creation or reopening; lead = completedAt − createdAt. Sample: completion events in window (n={a.cycle.count}).
             P50 = {fmtDays(a.cycle.p50)}d, P85 = {fmtDays(a.cycle.p85)}d. Percentiles use the nearest-rank method on the sorted sample.
           </Definition>
           <Definition title="EWMA trend" formula="λₜ = α·xₜ + (1−α)·λₜ₋₁, λ₀ = x₀">
@@ -271,11 +279,11 @@ export function AnalyticsClient({ initial, workspaceId }: { initial: AnalyticsDT
           </Definition>
           <Definition title="Forecast" formula="days = B / q, q ∈ {q50, q85}">
             B = {a.forecast.backlog} open tasks. q50 = {a.forecast.p50Daily}/day, q85 = {a.forecast.p85Daily}/day, computed over all {a.days} days
-            including zero-throughput days. A zero pace yields ∞, never a fabricated date.
+            including zero-throughput days. With open work and zero pace, no finite forecast is available. An empty backlog requires zero clearance days.
           </Definition>
           <Definition title="Deadline risk score" formula="S = Σ 100·wᵢ·fᵢ, fᵢ ∈ [0,1]">
             Model v{a.riskModel.version}, configuration revision {a.riskModel.revision}. Each factor value is in [0,1] with a range; missing
-            inputs use a neutral assumption and widen the score interval. Contributions sum to the score. Full definitions: RISK.md.
+            inputs use a neutral assumption and widen the score interval. Contributions sum to the score. Expand these definitions for methodology.
           </Definition>
         </div>
       </section>

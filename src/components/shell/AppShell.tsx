@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
@@ -67,6 +68,7 @@ export function AppShell({
   const refreshNotifications = useCallback(async () => {
     if (!workspace) return;
     try {
+      await api("/api/notifications", "POST", { workspaceId: workspace.id });
       const page = await api<NotificationPageDTO>(`/api/notifications?workspaceId=${workspace.id}&limit=20`);
       setFeed((prev) => {
         const fresh = new Set(page.items.map((n) => n.id));
@@ -80,12 +82,14 @@ export function AppShell({
 
   useEffect(() => {
     if (!workspace) return;
+    const initial = window.setTimeout(() => void refreshNotifications(), 0);
     const timer = window.setInterval(() => void refreshNotifications(), 30_000);
     const onFocus = () => {
       if (document.visibilityState === "visible") void refreshNotifications();
     };
     document.addEventListener("visibilitychange", onFocus);
     return () => {
+      window.clearTimeout(initial);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onFocus);
     };
@@ -176,9 +180,13 @@ export function AppShell({
   }
 
   async function logout() {
-    await api("/api/auth/logout", "POST");
-    router.push("/login");
-    router.refresh();
+    try {
+      await api("/api/auth/logout", "POST");
+      router.push("/login");
+      router.refresh();
+    } catch (e) {
+      push({ title: "Sign out failed", description: e instanceof Error ? e.message : undefined, tone: "error" });
+    }
   }
 
   async function markAllRead() {
@@ -245,6 +253,7 @@ export function AppShell({
 
   return (
     <AppContext.Provider value={ctx}>
+      <Dialog.Root open={mobileNav} onOpenChange={setMobileNav}>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-pulse-600 focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-white focus:shadow-glow"
@@ -256,26 +265,28 @@ export function AppShell({
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-ink-900/80 backdrop-blur-xl lg:block">
           {sidebar}
         </aside>
-        {mobileNav && (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <div className="absolute inset-0 bg-ink-950/70 backdrop-blur-sm animate-fade" onClick={() => setMobileNav(false)} />
-            <aside className="absolute inset-y-0 left-0 w-64 border-r border-line bg-ink-900 animate-fade">{sidebar}</aside>
-          </div>
-        )}
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-ink-950/70 lg:hidden" />
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-y-0 left-0 z-50 w-64 border-r border-line bg-ink-900 lg:hidden">
+            <Dialog.Title className="sr-only">Navigation</Dialog.Title>
+            <Dialog.Close aria-label="Close navigation" className="absolute right-2 top-2 p-2"><Icon name="x" size={16} /></Dialog.Close>
+            {sidebar}
+          </Dialog.Content>
+        </Dialog.Portal>
 
         <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
           {/* sticky topbar */}
           <header className="sticky top-0 z-30 border-b border-line bg-ink-950/75 backdrop-blur-xl">
             <div className="flex h-14 items-center gap-2 px-4 sm:gap-3 sm:px-6">
-              <button className="rounded-lg p-2 text-mist-400 hover:bg-ink-750 lg:hidden" onClick={() => setMobileNav(true)} aria-label="Open navigation">
+              <Dialog.Trigger asChild><button className="rounded-lg p-2 text-mist-400 hover:bg-ink-750 lg:hidden" aria-label="Open navigation">
                 <Icon name="menu" size={17} />
-              </button>
+              </button></Dialog.Trigger>
 
               <Menu>
                 <MenuTrigger asChild>
-                  <button className="flex items-center gap-2 rounded-xl border border-line bg-ink-850 px-3 py-1.5 text-[13px] font-semibold text-mist-200 hover:border-pulse-600/60">
+                  <button className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-ink-850 px-3 py-1.5 text-[13px] font-semibold text-mist-200 hover:border-pulse-600/60">
                     <span className="h-2 w-2 rounded-full bg-gradient-to-br from-cyan-300 to-pulse-500" />
-                    <span className="max-w-[140px] truncate">{workspace?.name ?? "No workspace"}</span>
+                    <span className="max-w-[100px] truncate sm:max-w-[140px]">{workspace?.name ?? "No workspace"}</span>
                     <Icon name="chevDown" size={13} className="text-mist-500" />
                   </button>
                 </MenuTrigger>
@@ -453,8 +464,8 @@ export function AppShell({
       <Modal open={newWsOpen} onClose={() => setNewWsOpen(false)} title="New workspace" subtitle="A separate, tenant-isolated space for a team or product.">
         <div className="space-y-4">
           <div>
-            <FieldLabel>Workspace name</FieldLabel>
-            <Input value={newWsName} onChange={(e) => setNewWsName(e.target.value)} placeholder="Orbital Research" autoFocus maxLength={80} />
+            <FieldLabel htmlFor="appshell-1">Workspace name</FieldLabel>
+            <Input id="appshell-1" value={newWsName} onChange={(e) => setNewWsName(e.target.value)} placeholder="Orbital Research" autoFocus maxLength={80} />
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setNewWsOpen(false)}>Cancel</Button>
@@ -462,6 +473,7 @@ export function AppShell({
           </div>
         </div>
       </Modal>
+    </Dialog.Root>
     </AppContext.Provider>
   );
 }

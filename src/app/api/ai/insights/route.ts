@@ -8,6 +8,6 @@ export async function POST(req: Request) {
     assertOrigin(req);
     const user = await requireUser();
     const input = await parseBody(req, aiInsightsSchema);
-    return ok(await getInsights(user.id, input.workspaceId, input.days));
+    return ok(await getInsights(user.id, input.workspaceId, input.days, { timeZone: input.tz, filters: { projectId: input.projectId, assigneeId: input.assigneeId, priority: input.priority, label: input.label } }));
   });
 }

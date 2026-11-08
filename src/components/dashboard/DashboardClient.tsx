@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import {
   Bar,
   BarChart,
@@ -85,9 +85,14 @@ export function DashboardClient({
   const [data, setData] = useState<DashboardDTO | null>(initial);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
+  const [previousInitial, setPreviousInitial] = useState(initial);
+  if (previousInitial !== initial) {
+    setPreviousInitial(initial); setData(initial); setError(initialError); setFilters(initialFilters);
+  }
   const localZone = useSyncExternalStore(subscribeTimeZone, getLocalTimeZone, getServerTimeZone);
   const zones = localZone && !BASE_ZONES.includes(localZone) ? [localZone, ...BASE_ZONES] : BASE_ZONES;
   const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
 
   const load = useCallback(
     async (next: DashboardFilters) => {
@@ -101,12 +106,13 @@ export function DashboardClient({
         const res = await fetch(`/api/dashboard?${qs}`, { signal: controller.signal });
         const body = (await res.json().catch(() => null)) as { dashboard?: DashboardDTO; error?: string } | null;
         if (!res.ok || !body?.dashboard) throw new Error(body?.error ?? `Request failed (${res.status})`);
+        if (controller.signal.aborted) return;
         setData(body.dashboard);
         const url = new URL(window.location.href);
         url.search = qs.replace(/(^|&)workspaceId=[^&]*/, "").replace(/^&/, "");
         window.history.replaceState(null, "", url.toString());
       } catch (e) {
-        if ((e as Error).name === "AbortError") return;
+        if (controller.signal.aborted || (e as Error).name === "AbortError") return;
         setError(e instanceof Error ? e.message : "Could not load the dashboard");
       } finally {
         if (abort.current === controller) setLoading(false);
@@ -130,7 +136,7 @@ export function DashboardClient({
           <h1 className="panel-title mt-1 text-2xl font-bold text-mist-100">Mission control</h1>
           {data && (
             <p className="mt-1 text-[12px] text-mist-500">
-              {data.window.startDay} → {data.window.endDay} · {data.window.timeZone} · risk model v{data.risk.modelVersion} rev {data.risk.revision}
+              {data.window.startDay} → {data.window.endDay} · {data.window.timeZone}
             </p>
           )}
         </div>
@@ -195,7 +201,7 @@ export function DashboardClient({
             <BlockedList d={data} onOpen={openTask} />
           </div>
 
-          <div className="h-[420px]"><AiPanel workspaceId={workspaceId} /></div>
+          <div className="h-[420px]"><AiPanel workspaceId={workspaceId} scope={filters} /></div>
         </div>
       )}
     </div>
@@ -377,7 +383,7 @@ function RiskPanel({ d, onOpen }: { d: DashboardDTO; onOpen: (id: string) => voi
     <section className="card p-4 sm:p-5 lg:col-span-7" aria-labelledby="risk-title" data-testid="risk-panel">
       <div className="mb-3 flex flex-wrap items-baseline gap-2">
         <h2 id="risk-title" className="panel-title text-[14px] font-semibold text-mist-100">Deadline risk</h2>
-        <span className="font-mono text-[10.5px] text-mist-500">model v{r.modelVersion} · rev {r.revision} · cfg {r.fingerprint}</span>
+        <span className="text-[10.5px] text-mist-500">Open a task to explore its score and plausible range.</span>
       </div>
       {total === 0 ? (
         <EmptyState icon="shield" title="No open tasks to score" body="Risk applies to open tasks in the filtered population." />

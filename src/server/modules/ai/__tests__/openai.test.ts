@@ -64,6 +64,13 @@ describe("OpenAI-compatible provider (mocked fetch)", () => {
     await expect(generateWithOpenAI(bundle, { ...opts, timeoutMs: 10, fetchImpl })).rejects.toMatchObject({ kind: "timeout" });
   });
 
+  it("times out even when headers arrive but the body stalls", async () => {
+    const response = new Response("{}");
+    vi.spyOn(response, "json").mockImplementation(() => new Promise(() => {}));
+    const fetchImpl = mockFetch(async () => response);
+    await expect(generateWithOpenAI(bundle, { ...opts, timeoutMs: 10, fetchImpl })).rejects.toMatchObject({ kind: "timeout" });
+  });
+
   it("classifies provider statuses: 429 rate_limited, 401/403 auth, 5xx server", async () => {
     for (const [status, kind] of [
       [429, "rate_limited"],

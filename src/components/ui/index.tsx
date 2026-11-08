@@ -160,6 +160,6 @@ export function Meter({ value, color, className }: { value: number; color: strin
   );
 }
 
-export function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-mist-500">{children}</label>;
+export function FieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-mist-500">{children}</label>;
 }

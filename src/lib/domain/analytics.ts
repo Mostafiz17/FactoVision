@@ -207,7 +207,7 @@ export function forecast(
   const p85Daily = percentile(dailyCompleted, 85);
   const smooth = ewmaSeries(dailyCompleted, alpha);
   const ewmaLast = smooth.length === 0 ? 0 : round(smooth[smooth.length - 1], 3);
-  const days = (rate: number) => (backlog === 0 ? 0 : rate <= 0 ? Infinity : round(backlog / rate, 1));
+  const days = (rate: number) => (backlog === 0 ? 0 : rate <= 0 ? null : round(backlog / rate, 1));
   return {
     backlog,
     p50Daily,

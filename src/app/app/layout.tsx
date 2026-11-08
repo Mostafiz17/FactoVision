@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     : { items: [], nextCursor: null, unreadCount: 0 };
   return (
     <AppShell
+      key={workspace?.id ?? "none"}
       user={{ id: user.id, name: user.name, email: user.email, avatarHue: user.avatarHue }}
       workspaces={workspaces}
       workspace={workspace}
